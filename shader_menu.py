@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 
 OSC_HOST = "127.0.0.1"
 OSC_PORT = 8001
-MIDI_INPUT_INDEX = 16
+MIDI_INPUT_INDEX = 1
 MIDI_CC_TO_OSC = {
     120: "/u_x0",
     121: "/u_x1",
