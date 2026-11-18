@@ -27,4 +27,9 @@ class ofApp : public ofBaseApp{
 		float shaderX0 = 0.1f;
 		float shaderX1 = 0.5f;
 		float shaderX2 = 0.5f;
+
+	private:
+		bool loadShader(const std::string& name);
+		std::string shaderDirectory;
+		std::string currentShaderName = "blob";
 };

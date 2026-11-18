@@ -32,3 +32,30 @@ as above. `config.make` can also hold local build settings, but avoid committing
 machine-specific absolute paths.
 
 Keep the shader files in `bin/data`; they are runtime assets, not build output.
+
+## Shader menu overlay
+
+The openFrameworks app listens for shader selections over OSC on port `8001`.
+It starts with `blob.frag`; run the Python menu to select between that shader
+and `shader.frag`:
+
+```sh
+make Debug
+```
+
+In one terminal, launch the renderer:
+
+```sh
+make RunDebug
+```
+
+In a second terminal, launch the menu:
+
+```sh
+python3 shader_menu.py
+```
+
+The menu uses only Python's standard library. It opens as a small always-on-top
+panel near the bottom-center of the primary display. Press `Esc` to close it.
+The `Blob` and `Gradient` buttons send their selection to the local renderer;
+the renderer keeps its currently loaded shader if a new shader fails to load.

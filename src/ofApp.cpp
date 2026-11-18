@@ -1,6 +1,7 @@
 #include "ofApp.h"
 
 #include <cmath>
+#include <utility>
 
 namespace {
 constexpr int oscPort = 8001;
@@ -8,19 +9,41 @@ constexpr int oscPort = 8001;
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-	const auto shaderDirectory = ofIsGLProgrammableRenderer()
+	shaderDirectory = ofIsGLProgrammableRenderer()
 		? "shadersGL3"
 		: "shadersGL2";
-	const auto vertexShaderPath = ofToDataPath(std::string(shaderDirectory) + "/shader.vert");
-	const auto fragmentShaderPath = ofToDataPath(std::string(shaderDirectory) + "/blog.frag");
-	shaderLoaded = shader.load(vertexShaderPath, fragmentShaderPath);
-	if(!shaderLoaded){
-		ofLogError("ofApp::setup") << "Failed to load shaders from " << shaderDirectory;
-	}
+	loadShader(currentShaderName);
 
 	if(!oscReceiver.setup(oscPort)){
 		ofLogError("ofApp::setup") << "Failed to listen for OSC on port " << oscPort;
 	}
+}
+
+//--------------------------------------------------------------
+bool ofApp::loadShader(const std::string& name){
+	std::string fragmentShaderName;
+	if(name == "blob"){
+		fragmentShaderName = "blob.frag";
+	}else if(name == "shader"){
+		fragmentShaderName = "shader.frag";
+	}else{
+		ofLogWarning("ofApp::loadShader") << "Unknown shader: " << name;
+		return false;
+	}
+
+	const auto vertexShaderPath = ofToDataPath(shaderDirectory + "/shader.vert");
+	const auto fragmentShaderPath = ofToDataPath(shaderDirectory + "/" + fragmentShaderName);
+	ofShader candidate;
+	if(!candidate.load(vertexShaderPath, fragmentShaderPath)){
+		ofLogError("ofApp::loadShader") << "Failed to load " << fragmentShaderName;
+		return false;
+	}
+
+	shader = std::move(candidate);
+	shaderLoaded = true;
+	currentShaderName = name;
+	ofLogNotice("ofApp::loadShader") << "Loaded " << fragmentShaderName;
+	return true;
 }
 
 //--------------------------------------------------------------
@@ -31,6 +54,15 @@ void ofApp::update(){
 			continue;
 		}
 		const auto address = message.getAddress();
+		if(address == "/shader"){
+			if(message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING){
+				ofLogWarning("ofApp::update") << "Expected one string argument for /shader";
+				continue;
+			}
+			loadShader(message.getArgAsString(0));
+			continue;
+		}
+
 		float* shaderValue = nullptr;
 		if(address == "/u_x0"){
 			shaderValue = &shaderX0;
@@ -72,6 +104,7 @@ void ofApp::draw(){
 	const auto viewport = ofGetNativeViewport();
 	shader.begin();
 	shader.setUniform2f("u_resolution", viewport.width, viewport.height);
+	shader.setUniform2f("resolution", viewport.width, viewport.height);
 	shader.setUniform1f("u_time", ofGetElapsedTimef());
 	shader.setUniform1f("u_x0", shaderX0);
 	shader.setUniform1f("u_x1", shaderX1);
