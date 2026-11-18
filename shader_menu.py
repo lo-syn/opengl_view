@@ -2,6 +2,8 @@ import socket
 import struct
 import sys
 
+from midi_send import *
+
 import mido
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
