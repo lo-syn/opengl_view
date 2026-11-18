@@ -5,11 +5,12 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
+QListWidget,
+    QListWidgetItem
 )
 
 
@@ -38,27 +39,6 @@ class ShaderMenu(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setFixedSize(460, 104)
-        self.setStyleSheet(
-            """
-            QWidget {
-                background-color: #171923;
-            }
-            QLabel {
-                color: #cbd5e0;
-            }
-            QPushButton {
-                background-color: #343b4b;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 22px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #52617a;
-            }
-            """
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -68,15 +48,16 @@ class ShaderMenu(QWidget):
         title.setStyleSheet("color: #a0aec0; font-size: 9pt;")
         layout.addWidget(title)
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(12)
+        self.shader_list = QListWidget()
+        self.shader_list.setSpacing(12)
         for label, name in SHADERS.items():
-            button = QPushButton(label)
-            button.clicked.connect(lambda _checked=False, selected=name: self.send_shader(selected))
-            button_layout.addWidget(button)
-        layout.addLayout(button_layout)
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            self.shader_list.addItem(item)
+        self.shader_list.itemClicked.connect(self.on_shader_selected)
+        layout.addWidget(self.shader_list)
 
-        self.status = QLabel("Choose a shader")
+        self.status = QLabel("Select a shader:")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status.setStyleSheet("font-size: 9pt;")
         layout.addWidget(self.status)
