@@ -60,5 +60,8 @@ python3 shader_menu.py
 The menu opens as a small always-on-top panel near the bottom-center of the
 primary display. The renderer uses a
 borderless window so this menu can stay visible above it. Press `Esc` to close it.
-The `Blob` and `Gradient` buttons send their selection to the local renderer;
-the renderer keeps its currently loaded shader if a new shader fails to load.
+Use the up/down arrow keys to navigate the shader names, then press `Enter` or
+`Space` to activate one; clicking a name also works. The active choice is
+marked `on` at the right. Activating the active shader again resets the
+renderer, and `Reset` always resets it. The renderer keeps its currently loaded
+shader if a new shader fails to load.
