@@ -52,10 +52,13 @@ make RunDebug
 In a second terminal, launch the menu:
 
 ```sh
+sudo apt install libxcb-cursor0
+pip install PyQt6
 python3 shader_menu.py
 ```
 
-The menu uses only Python's standard library. It opens as a small always-on-top
-panel near the bottom-center of the primary display. Press `Esc` to close it.
+The menu opens as a small always-on-top panel near the bottom-center of the
+primary display. The renderer uses a
+borderless window so this menu can stay visible above it. Press `Esc` to close it.
 The `Blob` and `Gradient` buttons send their selection to the local renderer;
 the renderer keeps its currently loaded shader if a new shader fails to load.

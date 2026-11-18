@@ -12,7 +12,6 @@ void ofApp::setup(){
 	shaderDirectory = ofIsGLProgrammableRenderer()
 		? "shadersGL3"
 		: "shadersGL2";
-	loadShader(currentShaderName);
 
 	if(!oscReceiver.setup(oscPort)){
 		ofLogError("ofApp::setup") << "Failed to listen for OSC on port " << oscPort;
@@ -57,6 +56,12 @@ void ofApp::update(){
 		if(address == "/shader"){
 			if(message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING){
 				ofLogWarning("ofApp::update") << "Expected one string argument for /shader";
+				continue;
+			}
+			if (message.getArgAsString(0) == "reset"){
+				shaderLoaded = false;
+				currentShaderName = "reset";
+				ofLogNotice("ofApp::update") << "Reset shader";
 				continue;
 			}
 			loadShader(message.getArgAsString(0));

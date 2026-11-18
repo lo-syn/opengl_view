@@ -3,11 +3,13 @@
 
 //========================================================================
 int main( ){
-	//Use ofGLFWWindowSettings for more options like multi-monitor fullscreen
-	ofGLWindowSettings settings;
+	// Use a borderless window so the external shader menu can remain above it.
+	ofGLFWWindowSettings settings;
 
-	settings.setSize(1920, 1080);
-	settings.windowMode = OF_FULLSCREEN; //can also be OF_FULLSCREEN
+	settings.setSize(680, 480);
+	settings.setPosition({0, 0});
+	settings.windowMode = OF_WINDOW;
+	settings.decorated = false;
 	auto window = ofCreateWindow(settings);
 
 	ofRunApp(window, std::make_shared<ofApp>());

@@ -25,8 +25,8 @@ class ofApp : public ofBaseApp{
 		bool shaderLoaded = false;
 		ofxOscReceiver oscReceiver;
 		float shaderX0 = 0.1f;
-		float shaderX1 = 0.5f;
-		float shaderX2 = 0.5f;
+		float shaderX1 = 0.1f;
+		float shaderX2 = 0.1f;
 
 	private:
 		bool loadShader(const std::string& name);
