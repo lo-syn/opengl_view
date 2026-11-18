@@ -1,7 +1,9 @@
 import socket
+import struct
 import sys
 
-from PyQt6.QtCore import Qt, pyqtSignal
+import mido
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import (
     QApplication,
@@ -9,13 +11,19 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QWidget,
-QListWidget,
+    QListWidget,
     QListWidgetItem
 )
 
 
 OSC_HOST = "127.0.0.1"
 OSC_PORT = 8001
+MIDI_INPUT_INDEX = 16
+MIDI_CC_TO_OSC = {
+    0: "/u_x0",
+    1: "/u_x1",
+    2: "/u_x2",
+}
 SHADERS = {
     "Blob": "blob",
     "Gradient": "shader",
@@ -23,9 +31,14 @@ SHADERS = {
 
 TOGGLE_STATES = {True: "on", False: ""}
 
+
 def osc_string(value):
     encoded = value.encode("utf-8") + b"\0"
     return encoded + b"\0" * (-len(encoded) % 4)
+
+
+def osc_float(address, value):
+    return osc_string(address) + osc_string(",f") + struct.pack(">f", value)
 
 
 class ShaderListWidget(QListWidget):
@@ -42,6 +55,17 @@ class ShaderListWidget(QListWidget):
 class ShaderMenu(QWidget):
     def __init__(self):
         super().__init__()
+        midi_ports = mido.get_input_names()
+        if MIDI_INPUT_INDEX >= len(midi_ports):
+            port_list = "\n".join(
+                f"{index}: {name}" for index, name in enumerate(midi_ports)
+            ) or "(no MIDI input ports found)"
+            raise RuntimeError(
+                f"MIDI input index {MIDI_INPUT_INDEX} is unavailable. "
+                f"Available inputs:\n{port_list}"
+            )
+
+        self.midi_input = mido.open_input(midi_ports[MIDI_INPUT_INDEX])
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.active_shader = None
 
@@ -81,6 +105,10 @@ class ShaderMenu(QWidget):
         layout.addWidget(self.shader_list)
         self.shader_list.setCurrentRow(0)
 
+        self.midi_timer = QTimer(self)
+        self.midi_timer.timeout.connect(self.read_midi)
+        self.midi_timer.start(5)
+
     def _create_row(self, label, name, state: bool):
         row = QWidget()
         row_layout = QHBoxLayout(row)
@@ -112,6 +140,17 @@ class ShaderMenu(QWidget):
         packet = osc_string("/shader") + osc_string(",s") + osc_string(name)
         self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
+    def read_midi(self):
+        for message in self.midi_input.iter_pending():
+            if message.type != "control_change":
+                continue
+            address = MIDI_CC_TO_OSC.get(message.control)
+            if address is None:
+                continue
+            value = message.value / 127.0
+            packet = osc_float(address, value)
+            self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
+
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Escape:
             self.close()
@@ -119,6 +158,8 @@ class ShaderMenu(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        self.midi_timer.stop()
+        self.midi_input.close()
         self.udp_socket.close()
         super().closeEvent(event)
 

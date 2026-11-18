@@ -53,7 +53,7 @@ In a second terminal, launch the menu:
 
 ```sh
 sudo apt install libxcb-cursor0
-pip install PyQt6
+pip install PyQt6 mido python-rtmidi
 python3 shader_menu.py
 ```
 
@@ -65,3 +65,12 @@ Use the up/down arrow keys to navigate the shader names, then press `Enter` or
 marked `on` at the right. Activating the active shader again resets the
 renderer, and `Reset` always resets it. The renderer keeps its currently loaded
 shader if a new shader fails to load.
+
+The menu also reads MIDI from input-list index `16` (the seventeenth input,
+since indices start at zero). MIDI control changes `0`, `1`, and `2` are sent
+as normalized float values to `/u_x0`, `/u_x1`, and `/u_x2`. To confirm the
+input index on your machine, run:
+
+```sh
+python3 -c "import mido; print(*enumerate(mido.get_input_names()), sep='\n')"
+```
