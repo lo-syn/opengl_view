@@ -33,6 +33,8 @@ SHADERS = {
 
 TOGGLE_STATES = {True: "on", False: ""}
 
+ENABLE_MIDI = False
+
 
 def osc_string(value):
     encoded = value.encode("utf-8") + b"\0"
@@ -57,17 +59,20 @@ class ShaderListWidget(QListWidget):
 class ShaderMenu(QWidget):
     def __init__(self):
         super().__init__()
-        midi_ports = mido.get_input_names()
-        if MIDI_INPUT_INDEX >= len(midi_ports):
-            port_list = "\n".join(
-                f"{index}: {name}" for index, name in enumerate(midi_ports)
-            ) or "(no MIDI input ports found)"
-            raise RuntimeError(
-                f"MIDI input index {MIDI_INPUT_INDEX} is unavailable. "
-                f"Available inputs:\n{port_list}"
-            )
 
-        self.midi_input = mido.open_input(midi_ports[MIDI_INPUT_INDEX])
+        if ENABLE_MIDI:
+            midi_ports = mido.get_input_names()
+            if MIDI_INPUT_INDEX >= len(midi_ports):
+                port_list = "\n".join(
+                    f"{index}: {name}" for index, name in enumerate(midi_ports)
+                ) or "(no MIDI input ports found)"
+                raise RuntimeError(
+                    f"MIDI input index {MIDI_INPUT_INDEX} is unavailable. "
+                    f"Available inputs:\n{port_list}"
+                )
+
+            self.midi_input = mido.open_input(midi_ports[MIDI_INPUT_INDEX])
+
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.active_shader = None
 
@@ -76,7 +81,14 @@ class ShaderMenu(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
-        self.setFixedSize(460, 142)
+        self.setFixedSize(680, 420)
+        self.setStyleSheet(
+            "QWidget { background-color: #000; color: #fff; }"
+            "QListWidget { border: 0; }"
+            "QListWidget::item { padding: 3px 6px; }"
+            "QListWidget::item:selected { background-color: #555; color: #fff; }"
+            "QListWidget QWidget { background-color: transparent; }"
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -84,15 +96,11 @@ class ShaderMenu(QWidget):
 
         title = QLabel("SHADER")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #a0aec0; font-size: 9pt;")
+        title.setStyleSheet("color: #fff; font-size: 9pt;")
         layout.addWidget(title)
 
         self.shader_list = ShaderListWidget()
-        self.shader_list.setSpacing(2)
-        #self.shader_list.setStyleSheet(
-        #    "QListWidget { background: transparent; border: 0; }"
-        #    "QListWidget::item { padding: 3px 6px; }"
-        #)
+        self.shader_list.setSpacing(3)
 
         self.status_labels: dict[str, QLabel] = {}
         for label, name in SHADERS.items():
@@ -104,12 +112,20 @@ class ShaderMenu(QWidget):
             self.shader_list.setItemWidget(item, row)
 
         self.shader_list.itemActivated.connect(self.activate_item)
+        self.shader_list.currentRowChanged.connect(self.update_selected_row)
         layout.addWidget(self.shader_list)
         self.shader_list.setCurrentRow(0)
 
-        self.midi_timer = QTimer(self)
-        self.midi_timer.timeout.connect(self.read_midi)
-        self.midi_timer.start(5)
+        if ENABLE_MIDI:
+            self.midi_timer = QTimer(self)
+            self.midi_timer.timeout.connect(self.read_midi)
+            self.midi_timer.start(5)
+
+    def update_selected_row(self, selected_row: int):
+        for row_index in range(self.shader_list.count()):
+            row = self.shader_list.itemWidget(self.shader_list.item(row_index))
+            background = "#555" if row_index == selected_row else "transparent"
+            row.setStyleSheet(f"background-color: {background};")
 
     def _create_row(self, label, name, state: bool):
         row = QWidget()
