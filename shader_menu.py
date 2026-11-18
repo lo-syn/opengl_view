@@ -22,9 +22,9 @@ OSC_HOST = "127.0.0.1"
 OSC_PORT = 8001
 MIDI_INPUT_INDEX = 16
 MIDI_CC_TO_OSC = {
-    0: "/u_x0",
-    1: "/u_x1",
-    2: "/u_x2",
+    120: "/u_x0",
+    121: "/u_x1",
+    122: "/u_x2",
 }
 SHADERS = {
     "Blob": "blob",
