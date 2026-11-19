@@ -1,5 +1,8 @@
 import struct
 
+OSC_HOST = "127.0.0.1"
+OSC_PORT = 8001
+
 def osc_string(value):
     encoded = value.encode("utf-8") + b"\0"
     return encoded + b"\0" * (-len(encoded) % 4)

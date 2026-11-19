@@ -1,5 +1,7 @@
 import mido
 
+from lib_osc import osc_float, OSC_HOST, OSC_PORT
+
 
 MIDI_INPUT_INDEX = 1  # Default MIDI input index
 MIDI_CC_TO_OSC = {
