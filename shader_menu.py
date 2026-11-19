@@ -227,14 +227,17 @@ class DefaultMenu(QWidget):
         if name not in self.shaders.keys():
             raise ValueError("Attempting to run missing shader")
         current_shader: ShaderMenuItem = self.shaders[name]
+        # Reset if already active
         if self.active_shader == name:
             self.status_labels[name].setText(current_shader.off_state_msg)
             self.active_shader = None
             self.send_shader("reset")
             return
+        # Set off message for previous shader
         if self.active_shader is not None:
             self.status_labels[self.active_shader].setText(ShaderMenuItem.off_state_msg)
-        
+
+        # Set active shader
         self.active_shader = name
         self.status_labels[name].setText(current_shader.on_state_msg)
         self.send_shader(name)
