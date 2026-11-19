@@ -18,12 +18,6 @@ from PyQt6.QtWidgets import (
 )
 
 
-TOGGLE_STATES = {True: "on", False: ""}
-
-# Default trigger states
-ENABLE_MIDI = False
-
-
 class DefaultListWidget(QListWidget):
     # Create navigateable list widget
     activateCurrentItem = pyqtSignal()
@@ -121,9 +115,6 @@ class DefaultMenu(QWidget):
         # Show shader menu by default
         self.show_shaders()
 
-        #if ENABLE_MIDI:
-        #    self.set_midi_enabled(True)
-
     def update_selected_row(self, selected_row: int):
         self.clear_message()
         for row_index in range(self.list_widget.count()):
@@ -163,12 +154,6 @@ class DefaultMenu(QWidget):
     def clear_message(self):
         self.message_bar.clear()
 
-    '''
-    def activate_current_item(self):
-        item = self.list_widget.currentItem()
-        if item is not None:
-            self.activate_item(item)
-    '''
     def set_midi_enabled(self, enabled: bool) -> bool:
         if enabled:
             if self.midi_handler is not None:
