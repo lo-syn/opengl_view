@@ -85,7 +85,7 @@ class ShaderMenu(QWidget):
         self.setStyleSheet(
             "QWidget { background-color: #000; color: #fff; }"
             "QListWidget { border: 0; }"
-            "QListWidget::item { padding: 3px 6px; }"
+            "QListWidget::item { padding: 0 6px; }"
             "QListWidget::item:selected { background-color: #555; color: #fff; }"
             "QListWidget QWidget { background-color: transparent; }"
         )
