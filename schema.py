@@ -5,7 +5,6 @@ from collections.abc import Callable
 
 @dataclass
 class DefaultMenuItem:
-    name: str
     state: bool | None = False
     on_state_msg: str | None = ""
     off_state_msg: str | None = ""

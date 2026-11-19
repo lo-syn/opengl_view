@@ -1,8 +1,8 @@
 import socket
 import sys
 
-from midi_send import *
-from lib_osc import osc_float, osc_string
+from midi_send import MidiHandler, MIDI_INPUT_INDEX
+from lib_osc import osc_string, OSC_HOST, OSC_PORT
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -56,10 +56,10 @@ class DefaultMenu(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.shaders = {"Blob": ShaderMenuItem(name="blob", on_state_msg="on"),
-           "Gradient": ShaderMenuItem(name="shader", on_state_msg="on")}
+        self.shaders = {"Blob": ShaderMenuItem(on_state_msg="on"),
+           "Gradient": ShaderMenuItem(on_state_msg="on")}
 
-        self.settings = {"enable_midi": SettingsMenuItem(name="enable_midi", on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
+        self.settings = {"enable_midi": SettingsMenuItem(on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
 
         # Setup UDP socket to send OSC messages to openFrameworks application
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -95,11 +95,13 @@ class DefaultMenu(QWidget):
 
         # Connect actions to functions
         self.status_labels: dict[str, QLabel] = {}
+        #self.list_widget.activateCurrentItem.connect(self.activate_current_item)
         self.list_widget.itemActivated.connect(self.activate_item)
         self.list_widget.currentRowChanged.connect(self.update_selected_row)
+
         self.list_widget.navigateRight.connect(self.show_settings)
         self.list_widget.navigateLeft.connect(self.show_shaders)
-        self.list_widget.activateCurrentItem.connect(self.activate_current_item)
+
         layout.addWidget(self.list_widget)
 
         self.current_page = "shaders"
@@ -121,10 +123,10 @@ class DefaultMenu(QWidget):
 
     def _populate_menu(self, menu_items: dict[str, DefaultMenuItem]):
         # Populates selected list widget with menu items
-        for _, menu_item in menu_items.items():
+        for name, menu_item in menu_items.items():
             item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, menu_item.name)
-            row = self._create_row(menu_item)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            row = self._create_row(name, menu_item)
             self.list_widget.addItem(item)
             item.setSizeHint(row.sizeHint())
             self.list_widget.setItemWidget(item, row)
@@ -144,81 +146,81 @@ class DefaultMenu(QWidget):
         self.list_widget.clear()
         self._populate_menu(self.settings)
         self.list_widget.setCurrentRow(0)
-
+    '''
     def activate_current_item(self):
         item = self.list_widget.currentItem()
         if item is not None:
             self.activate_item(item)
-
-    def set_midi_enabled(self, enabled: bool):
+    '''
+    def set_midi_enabled(self, enabled: bool) -> bool:
         if enabled:
             if self.midi_handler is not None:
-                if self.current_page == "settings":
-                    self.status_labels["midi_enable"].setText("enabled")
-                return
-            midi_handler = MidiHandler(MIDI_INPUT_INDEX)
+                self.status_labels["enable_midi"].setText("enabled")
             try:
+                midi_handler = MidiHandler(MIDI_INPUT_INDEX)
                 midi_handler.open_midi_input()
-            except (OSError, ValueError) as error:
-                ENABLE_MIDI = False
-                if self.current_page == "settings":
-                    self.status_labels["midi_enable"].setText("disabled")
+            except Exception as error:
+                self.status_labels["enable_midi"].setText("disabled")
                 QMessageBox.warning(self, "MIDI", f"Could not enable MIDI: {error}")
-                return
+                return False
 
             self.midi_handler = midi_handler
             self.midi_timer = QTimer(self)
-            self.midi_timer.timeout.connect(self.read_midi)
+            self.midi_timer.timeout.connect(self.midi_handler.read_midi)
             self.midi_timer.start(5)
-            ENABLE_MIDI = True
-            if self.current_page == "settings":
-                self.status_labels["midi_enable"].setText("enabled")
-            return
 
-        ENABLE_MIDI = False
+            return True
+
         if self.midi_timer is not None:
             self.midi_timer.stop()
             self.midi_timer = None
         if self.midi_handler is not None:
             self.midi_handler.close_midi_input()
             self.midi_handler = None
-        if self.current_page == "settings":
-            self.status_labels["midi_enable"].setText("disabled")
+        return False
 
-    def read_midi(self):
-        if self.midi_handler is None:
-            return
-        for message in self.midi_handler.read_midi_messages():
-            if message.type != "control_change":
-                continue
-            address = MIDI_CC_TO_OSC.get(message.control)
-            if address is None:
-                continue
-            packet = osc_float(address, message.value / 127.0)
-            self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
-
-    def _create_row(self, menu_item: DefaultMenuItem):
+    def _create_row(self, name: str, menu_item: DefaultMenuItem):
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.addWidget(QLabel(menu_item.name))
+        row_layout.addWidget(QLabel(name))
         row_layout.addStretch()
         if menu_item.state:
             status = QLabel(menu_item.on_state_msg)
         else:
             status = QLabel(menu_item.off_state_msg)
         status.setObjectName("activeStatus")
-        self.status_labels[menu_item.name] = status
+        self.status_labels[name] = status
         row_layout.addWidget(status)
         return row
+
+    def _run_settings_option(self, name: str):
+        if name not in self.settings.keys():
+            raise ValueError("Attempting to run missing setting")
+        current_setting: SettingsMenuItem = self.settings[name]
+        current_state = current_setting.state
+        state = current_setting.linked_function(not current_state)
+        current_setting.state = state
+        if state:
+            self.status_labels[name].setText(current_setting.on_state_msg)
+        else:
+            self.status_labels[name].setText(current_setting.off_state_msg)
+
+    def _run_shader_option(self, name: str):
+        if name not in self.shaders.keys():
+            raise ValueError("Attempting to run missing shader")
+        current_shader: ShaderMenuItem = self.shaders[name]
+        current_state = current_shader.state
+        
+        return
 
     def activate_item(self, item):
         name = item.data(Qt.ItemDataRole.UserRole)
         if self.current_page == "settings":
-            if name == "enable_midi":
-                self.set_midi_enabled(not self.settings["enable_midi"].state)
+            self._run_settings_option(name)
             return
-        if self.current_page != "shaders":
+        if self.current_page == "shaders":
+            self._run_shader_option(name)
             return
         if self.active_shader == name:
             self.status_labels[name].setText("")
