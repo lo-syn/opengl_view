@@ -2,7 +2,7 @@ import socket
 import sys
 
 from midi_send import *
-from lib_osc import osc_string
+from lib_osc import osc_float, osc_string
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -13,7 +13,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QListWidget,
-    QListWidgetItem
+    QListWidgetItem,
+    QMessageBox,
 )
 
 
@@ -30,12 +31,26 @@ TOGGLE_STATES = {True: "on", False: ""}
 ENABLE_MIDI = False
 
 
-class ShaderListWidget(QListWidget):
+class DefaultListWidget(QListWidget):
     activateCurrentItem = pyqtSignal()
+    navigateRight = pyqtSignal()
+    navigateLeft = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Space:
-            self.activateCurrentItem.emit()
+            item = self.currentItem()
+            if item is not None and item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                super().keyPressEvent(event)
+            else:
+                self.activateCurrentItem.emit()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Right:
+            self.navigateRight.emit()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Left:
+            self.navigateLeft.emit()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -45,10 +60,11 @@ class ShaderMenu(QWidget):
     def __init__(self):
         super().__init__()
 
+        # Setup UDP socket to send OSC messages to openFrameworks application
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.active_shader = None
 
-        self.setWindowTitle("Shader menu")
+        self.setWindowTitle("Default menu")
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -66,41 +82,121 @@ class ShaderMenu(QWidget):
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(4)
 
-        title = QLabel("SHADER")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #fff; font-size: 9pt;")
-        layout.addWidget(title)
+        # Setup label for the title of the current menu
+        self.title = QLabel()
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setStyleSheet("color: #fff; font-size: 9pt;")
+        layout.addWidget(self.title)
 
-        self.shader_list = ShaderListWidget()
+        self.shader_list = DefaultListWidget()
         self.shader_list.setSpacing(3)
 
         self.status_labels: dict[str, QLabel] = {}
-        for label, name in SHADERS.items():
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            row = self._create_row(label, name, False)
-            self.shader_list.addItem(item)
-            item.setSizeHint(row.sizeHint())
-            self.shader_list.setItemWidget(item, row)
-
         self.shader_list.itemActivated.connect(self.activate_item)
         self.shader_list.currentRowChanged.connect(self.update_selected_row)
+        self.shader_list.navigateRight.connect(self.show_settings)
+        self.shader_list.navigateLeft.connect(self.show_shaders)
+        self.shader_list.activateCurrentItem.connect(self.activate_current_item)
         layout.addWidget(self.shader_list)
-        self.shader_list.setCurrentRow(0)
+
+        self.current_page = "shaders"
+        self.midi_handler = None
+        self.midi_timer = None
+        self.show_shaders()
 
         if ENABLE_MIDI:
-            midi_handler = MidiHandler(MIDI_INPUT_INDEX)
-            midi_handler.open_midi_input()
-
-            self.midi_timer = QTimer(self)
-            self.midi_timer.timeout.connect(self.read_midi)
-            self.midi_timer.start(5)
+            self.set_midi_enabled(True)
 
     def update_selected_row(self, selected_row: int):
         for row_index in range(self.shader_list.count()):
             row = self.shader_list.itemWidget(self.shader_list.item(row_index))
-            background = "#555" if row_index == selected_row else "transparent"
-            row.setStyleSheet(f"background-color: {background};")
+            if row is not None:
+                background = "#555" if row_index == selected_row else "transparent"
+                row.setStyleSheet(f"background-color: {background};")
+
+    def show_shaders(self):
+        self.current_page = "shaders"
+        self.title.setText("SHADER")
+        self.status_labels.pop("midi_enable", None)
+        self.shader_list.clear()
+        for label, name in SHADERS.items():
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            row = self._create_row(label, name, self.active_shader == name)
+            self.shader_list.addItem(item)
+            item.setSizeHint(row.sizeHint())
+            self.shader_list.setItemWidget(item, row)
+        self.shader_list.setCurrentRow(0)
+
+    def show_settings(self):
+        self.current_page = "settings"
+        self.title.setText("SETTINGS")
+        self.shader_list.clear()
+
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, "midi_enable")
+        row = self._create_row("midi_enable", "midi_enable", ENABLE_MIDI)
+        self.status_labels["midi_enable"].setText(
+            "enabled" if ENABLE_MIDI else "disabled"
+        )
+        self.shader_list.addItem(item)
+        item.setSizeHint(row.sizeHint())
+        self.shader_list.setItemWidget(item, row)
+        self.shader_list.setCurrentRow(0)
+
+    def activate_current_item(self):
+        item = self.shader_list.currentItem()
+        if item is not None:
+            self.activate_item(item)
+
+    def set_midi_enabled(self, enabled: bool):
+        global ENABLE_MIDI
+
+        if enabled:
+            if self.midi_handler is not None:
+                if self.current_page == "settings":
+                    self.status_labels["midi_enable"].setText("enabled")
+                return
+            midi_handler = MidiHandler(MIDI_INPUT_INDEX)
+            try:
+                midi_handler.open_midi_input()
+            except (OSError, ValueError) as error:
+                ENABLE_MIDI = False
+                if self.current_page == "settings":
+                    self.status_labels["midi_enable"].setText("disabled")
+                QMessageBox.warning(self, "MIDI", f"Could not enable MIDI: {error}")
+                return
+
+            self.midi_handler = midi_handler
+            self.midi_timer = QTimer(self)
+            self.midi_timer.timeout.connect(self.read_midi)
+            self.midi_timer.start(5)
+            ENABLE_MIDI = True
+            if self.current_page == "settings":
+                self.status_labels["midi_enable"].setText("enabled")
+            return
+
+        ENABLE_MIDI = False
+        if self.midi_timer is not None:
+            self.midi_timer.stop()
+            self.midi_timer = None
+        if self.midi_handler is not None:
+            self.midi_handler.close_midi_input()
+            self.midi_handler = None
+        if self.current_page == "settings":
+            self.status_labels["midi_enable"].setText("disabled")
+
+    def read_midi(self):
+        if self.midi_handler is None:
+            return
+        for message in self.midi_handler.read_midi_messages():
+            if message.type != "control_change":
+                continue
+            address = MIDI_CC_TO_OSC.get(message.control)
+            if address is None:
+                continue
+            packet = osc_float(address, message.value / 127.0)
+            self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
     def _create_row(self, label, name, state: bool):
         row = QWidget()
@@ -116,6 +212,12 @@ class ShaderMenu(QWidget):
 
     def activate_item(self, item):
         name = item.data(Qt.ItemDataRole.UserRole)
+        if self.current_page == "settings":
+            if name == "midi_enable":
+                self.set_midi_enabled(not ENABLE_MIDI)
+            return
+        if self.current_page != "shaders":
+            return
         if self.active_shader == name:
             self.status_labels[name].setText("")
             self.active_shader = None
@@ -141,9 +243,7 @@ class ShaderMenu(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        if ENABLE_MIDI:
-            self.midi_timer.stop()
-            self.midi_input.close()
+        self.set_midi_enabled(False)
         self.udp_socket.close()
         super().closeEvent(event)
 
