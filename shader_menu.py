@@ -156,7 +156,7 @@ class DefaultMenu(QWidget):
             if self.midi_handler is not None:
                 self.status_labels["enable_midi"].setText("enabled")
             try:
-                midi_handler = MidiHandler()
+                midi_handler = MidiHandler(self.osc_handler)
                 midi_handler.open_midi_input()
             except Exception as error:
                 self.status_labels["enable_midi"].setText("disabled")
