@@ -121,7 +121,7 @@ class DefaultMenu(QWidget):
 
     def _populate_menu(self, menu_items: dict[str, DefaultMenuItem]):
         # Populates selected list widget with menu items
-        for label, menu_item in menu_items.items():
+        for _, menu_item in menu_items.items():
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, menu_item.name)
             row = self._create_row(menu_item)
