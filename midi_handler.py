@@ -1,6 +1,6 @@
 import mido
 
-from lib_osc import osc_float, OSC_HOST, OSC_PORT
+from osc_handler import osc_float, OSC_HOST, OSC_PORT
 
 
 MIDI_INPUT_INDEX = 1  # Default MIDI input index
@@ -11,8 +11,8 @@ MIDI_CC_TO_OSC = {
 }
 
 class MidiHandler:
-    def __init__(self, midi_input_index=MIDI_INPUT_INDEX):
-        self.midi_input_index = midi_input_index
+    def __init__(self):
+        self.midi_input_index = MIDI_INPUT_INDEX
         self.midi_input = None
 
     def open_midi_input(self):

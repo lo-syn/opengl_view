@@ -1,8 +1,7 @@
-import socket
 import sys
 
-from midi_send import MidiHandler, MIDI_INPUT_INDEX
-from lib_osc import osc_string, OSC_HOST, OSC_PORT
+from midi_handler import MidiHandler
+from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_float, osc_string
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -54,8 +53,7 @@ class DefaultMenu(QWidget):
 
         self.settings = {"enable_midi": SettingsMenuItem(on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
 
-        # Setup UDP socket to send OSC messages to openFrameworks application
-        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.osc_handler = OscHandler()
         self.active_shader = None
 
         self.setWindowTitle("Default menu")
@@ -88,7 +86,6 @@ class DefaultMenu(QWidget):
 
         # Connect actions to functions
         self.status_labels: dict[str, QLabel] = {}
-        #self.list_widget.activateCurrentItem.connect(self.activate_current_item)
         self.list_widget.itemActivated.connect(self.activate_item)
         self.list_widget.currentRowChanged.connect(self.update_selected_row)
 
@@ -159,7 +156,7 @@ class DefaultMenu(QWidget):
             if self.midi_handler is not None:
                 self.status_labels["enable_midi"].setText("enabled")
             try:
-                midi_handler = MidiHandler(MIDI_INPUT_INDEX)
+                midi_handler = MidiHandler()
                 midi_handler.open_midi_input()
             except Exception as error:
                 self.status_labels["enable_midi"].setText("disabled")
@@ -239,7 +236,7 @@ class DefaultMenu(QWidget):
 
     def send_shader(self, name):
         packet = osc_string("/shader") + osc_string(",s") + osc_string(name)
-        self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
+        self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
 
     def keyPressEvent(self, event: QKeyEvent):
