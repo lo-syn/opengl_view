@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
     QWidget,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
 )
 
 
@@ -104,6 +103,17 @@ class DefaultMenu(QWidget):
 
         layout.addWidget(self.list_widget)
 
+        self.message_bar = QLabel()
+        self.message_bar.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.message_bar.setWordWrap(True)
+        self.message_bar.setMinimumHeight(28)
+        self.message_bar.setStyleSheet(
+            "QLabel { background-color: #222; color: #fff; padding: 4px 6px; }"
+        )
+        layout.addWidget(self.message_bar)
+
         self.current_page = "shaders"
         self.midi_handler = None
         self.midi_timer = None
@@ -115,6 +125,7 @@ class DefaultMenu(QWidget):
         #    self.set_midi_enabled(True)
 
     def update_selected_row(self, selected_row: int):
+        self.clear_message()
         for row_index in range(self.list_widget.count()):
             row = self.list_widget.itemWidget(self.list_widget.item(row_index))
             if row is not None:
@@ -132,6 +143,7 @@ class DefaultMenu(QWidget):
             self.list_widget.setItemWidget(item, row)
 
     def show_shaders(self):
+        self.clear_message()
         # Show shader menu
         self.current_page = "shaders"
         self.title.setText("SHADER")
@@ -140,12 +152,17 @@ class DefaultMenu(QWidget):
         self.list_widget.setCurrentRow(0)
 
     def show_settings(self):
+        self.clear_message()
         # Show settings menu
         self.current_page = "settings"
         self.title.setText("SETTINGS")
         self.list_widget.clear()
         self._populate_menu(self.settings)
         self.list_widget.setCurrentRow(0)
+
+    def clear_message(self):
+        self.message_bar.clear()
+
     '''
     def activate_current_item(self):
         item = self.list_widget.currentItem()
@@ -161,7 +178,7 @@ class DefaultMenu(QWidget):
                 midi_handler.open_midi_input()
             except Exception as error:
                 self.status_labels["enable_midi"].setText("disabled")
-                QMessageBox.warning(self, "MIDI", f"Could not enable MIDI: {error}")
+                self.message_bar.setText(f"Could not enable MIDI: {error}")
                 return False
 
             self.midi_handler = midi_handler
@@ -215,6 +232,7 @@ class DefaultMenu(QWidget):
         return
 
     def activate_item(self, item):
+        self.clear_message()
         name = item.data(Qt.ItemDataRole.UserRole)
         if self.current_page == "settings":
             self._run_settings_option(name)
