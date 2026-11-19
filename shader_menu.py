@@ -48,8 +48,8 @@ class DefaultMenu(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.shaders = {"Blob": ShaderMenuItem(on_state_msg="on"),
-           "Gradient": ShaderMenuItem(on_state_msg="on")}
+        self.shaders = {"blob": ShaderMenuItem(on_state_msg="on"),
+           "shader": ShaderMenuItem(on_state_msg="on")}
 
         self.settings = {"enable_midi": SettingsMenuItem(on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
 
