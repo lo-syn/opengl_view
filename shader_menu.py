@@ -1,8 +1,8 @@
 import socket
-import struct
 import sys
 
 from midi_send import *
+from lib_osc import osc_string
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -19,12 +19,7 @@ from PyQt6.QtWidgets import (
 
 OSC_HOST = "127.0.0.1"
 OSC_PORT = 8001
-MIDI_INPUT_INDEX = 1
-MIDI_CC_TO_OSC = {
-    120: "/u_x0",
-    121: "/u_x1",
-    122: "/u_x2",
-}
+
 SHADERS = {
     "Blob": "blob",
     "Gradient": "shader",
@@ -33,15 +28,6 @@ SHADERS = {
 TOGGLE_STATES = {True: "on", False: ""}
 
 ENABLE_MIDI = False
-
-
-def osc_string(value):
-    encoded = value.encode("utf-8") + b"\0"
-    return encoded + b"\0" * (-len(encoded) % 4)
-
-
-def osc_float(address, value):
-    return osc_string(address) + osc_string(",f") + struct.pack(">f", value)
 
 
 class ShaderListWidget(QListWidget):
@@ -105,7 +91,7 @@ class ShaderMenu(QWidget):
         if ENABLE_MIDI:
             midi_handler = MidiHandler(MIDI_INPUT_INDEX)
             midi_handler.open_midi_input()
-            
+
             self.midi_timer = QTimer(self)
             self.midi_timer.timeout.connect(self.read_midi)
             self.midi_timer.start(5)
@@ -147,16 +133,6 @@ class ShaderMenu(QWidget):
         packet = osc_string("/shader") + osc_string(",s") + osc_string(name)
         self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
-    def read_midi(self):
-        for message in self.midi_input.iter_pending():
-            if message.type != "control_change":
-                continue
-            address = MIDI_CC_TO_OSC.get(message.control)
-            if address is None:
-                continue
-            value = message.value / 127.0
-            packet = osc_float(address, value)
-            self.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Escape:
@@ -165,8 +141,9 @@ class ShaderMenu(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        self.midi_timer.stop()
-        self.midi_input.close()
+        if ENABLE_MIDI:
+            self.midi_timer.stop()
+            self.midi_input.close()
         self.udp_socket.close()
         super().closeEvent(event)
 
