@@ -4,7 +4,6 @@ import sys
 
 from midi_send import *
 
-import mido
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import (
@@ -60,19 +59,6 @@ class ShaderMenu(QWidget):
     def __init__(self):
         super().__init__()
 
-        if ENABLE_MIDI:
-            midi_ports = mido.get_input_names()
-            if MIDI_INPUT_INDEX >= len(midi_ports):
-                port_list = "\n".join(
-                    f"{index}: {name}" for index, name in enumerate(midi_ports)
-                ) or "(no MIDI input ports found)"
-                raise RuntimeError(
-                    f"MIDI input index {MIDI_INPUT_INDEX} is unavailable. "
-                    f"Available inputs:\n{port_list}"
-                )
-
-            self.midi_input = mido.open_input(midi_ports[MIDI_INPUT_INDEX])
-
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.active_shader = None
 
@@ -117,6 +103,9 @@ class ShaderMenu(QWidget):
         self.shader_list.setCurrentRow(0)
 
         if ENABLE_MIDI:
+            midi_handler = MidiHandler(MIDI_INPUT_INDEX)
+            midi_handler.open_midi_input()
+            
             self.midi_timer = QTimer(self)
             self.midi_timer.timeout.connect(self.read_midi)
             self.midi_timer.start(5)
