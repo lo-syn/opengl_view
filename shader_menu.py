@@ -3,6 +3,7 @@ import sys
 
 from midi_send import *
 from lib_osc import osc_float, osc_string
+from schema import DefaultMenuItem, ShaderMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -26,17 +27,23 @@ SHADERS = {
     "Gradient": "shader",
 }
 
+SHADERS = {"Blob": ShaderMenuItem(label="Blob", name="blob"),
+           "Gradient": ShaderMenuItem(label="shader", name="shader")}
+
 TOGGLE_STATES = {True: "on", False: ""}
 
+# Default trigger states
 ENABLE_MIDI = False
 
 
 class DefaultListWidget(QListWidget):
+    # Create navigateable list widget
     activateCurrentItem = pyqtSignal()
     navigateRight = pyqtSignal()
     navigateLeft = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent):
+         # Handle key events for activating items and navigating
         if event.key() == Qt.Key.Key_Space:
             item = self.currentItem()
             if item is not None and item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
@@ -56,7 +63,7 @@ class DefaultListWidget(QListWidget):
         super().keyPressEvent(event)
 
 
-class ShaderMenu(QWidget):
+class DefaultMenu(QWidget):
     def __init__(self):
         super().__init__()
 
@@ -69,6 +76,7 @@ class ShaderMenu(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
+        # Change window size to match desired dimensions (e.g. 680x420)
         self.setFixedSize(680, 420)
         self.setStyleSheet(
             "QWidget { background-color: #000; color: #fff; }"
@@ -91,6 +99,7 @@ class ShaderMenu(QWidget):
         self.shader_list = DefaultListWidget()
         self.shader_list.setSpacing(3)
 
+        # Connect actions to functions
         self.status_labels: dict[str, QLabel] = {}
         self.shader_list.itemActivated.connect(self.activate_item)
         self.shader_list.currentRowChanged.connect(self.update_selected_row)
@@ -102,6 +111,8 @@ class ShaderMenu(QWidget):
         self.current_page = "shaders"
         self.midi_handler = None
         self.midi_timer = None
+
+        # Show shader menu by default
         self.show_shaders()
 
         if ENABLE_MIDI:
@@ -115,20 +126,25 @@ class ShaderMenu(QWidget):
                 row.setStyleSheet(f"background-color: {background};")
 
     def show_shaders(self):
+        # Show shader menu
         self.current_page = "shaders"
         self.title.setText("SHADER")
-        self.status_labels.pop("midi_enable", None)
+
+        # Remove Settings menu labels from shader menu
+        #self.status_labels.pop("midi_enable", None)
+
         self.shader_list.clear()
-        for label, name in SHADERS.items():
+        for label, data in SHADERS.items():
             item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            row = self._create_row(label, name, self.active_shader == name)
+            item.setData(Qt.ItemDataRole.UserRole, data.name)
+            row = self._create_row(label, data.name, False)
             self.shader_list.addItem(item)
             item.setSizeHint(row.sizeHint())
             self.shader_list.setItemWidget(item, row)
         self.shader_list.setCurrentRow(0)
 
     def show_settings(self):
+        # Show settings menu
         self.current_page = "settings"
         self.title.setText("SETTINGS")
         self.shader_list.clear()
@@ -250,7 +266,7 @@ class ShaderMenu(QWidget):
 
 def main():
     app = QApplication(sys.argv)
-    menu = ShaderMenu()
+    menu = DefaultMenu()
 
     screen_geometry = app.primaryScreen().availableGeometry()
     x_position = (screen_geometry.width() - menu.width()) // 2
