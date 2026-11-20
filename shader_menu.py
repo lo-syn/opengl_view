@@ -86,6 +86,17 @@ class DefaultMenu(QWidget):
         self.title.setStyleSheet("color: #fff; font-size: 9pt;")
         layout.addWidget(self.title)
 
+        self.status_bar = QLabel()
+        self.status_bar.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.status_bar.setMinimumHeight(28)
+        self.status_bar.setStyleSheet(
+            "QLabel { background-color: #222; color: #fff; padding: 4px 6px; }"
+        )
+        layout.addWidget(self.status_bar)
+        self.update_active_shader_status()
+
         self.list_widget = DefaultListWidget()
         self.list_widget.setSpacing(3)
 
@@ -181,6 +192,10 @@ class DefaultMenu(QWidget):
     def clear_message(self):
         self.message_bar.clear()
 
+    def update_active_shader_status(self):
+        shader_name = self.active_shader if self.active_shader is not None else "None"
+        self.status_bar.setText(f"Active Shader: {shader_name}")
+
     def set_midi_enabled(self, enabled: bool) -> bool:
         if enabled:
             if self.midi_handler is not None:
@@ -246,6 +261,7 @@ class DefaultMenu(QWidget):
             current_shader.state = False
             self.status_labels[name].setText(current_shader.off_state_msg)
             self.active_shader = None
+            self.update_active_shader_status()
             self.send_shader("reset")
             return
         # Set off message for previous shader
@@ -256,6 +272,7 @@ class DefaultMenu(QWidget):
 
         # Set active shader
         self.active_shader = name
+        self.update_active_shader_status()
         current_shader.state = True
         self.status_labels[name].setText(current_shader.on_state_msg)
         self.send_shader(name)
