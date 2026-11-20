@@ -20,18 +20,21 @@ from PyQt6.QtWidgets import (
 
 class DefaultListWidget(QListWidget):
     # Create navigateable list widget
-    activateCurrentItem = pyqtSignal()
+    activateCurrentItem = pyqtSignal(QListWidgetItem)
     navigateRight = pyqtSignal()
     navigateLeft = pyqtSignal()
+    closeRequested = pyqtSignal()
 
     def keyPressEvent(self, event: QKeyEvent):
          # Handle key events for activating items and navigating
-        if event.key() == Qt.Key.Key_Space:
+        if event.key() == Qt.Key.Key_Escape:
+            self.closeRequested.emit()
+            event.accept()
+            return
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             item = self.currentItem()
-            if item is not None and item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
-                super().keyPressEvent(event)
-            else:
-                self.activateCurrentItem.emit()
+            if item is not None:
+                self.activateCurrentItem.emit(item)
             event.accept()
             return
         if event.key() == Qt.Key.Key_Right:
@@ -88,11 +91,12 @@ class DefaultMenu(QWidget):
 
         # Connect actions to functions
         self.status_labels: dict[str, QLabel] = {}
-        self.list_widget.itemActivated.connect(self.activate_item)
+        self.list_widget.activateCurrentItem.connect(self.activate_item)
         self.list_widget.currentRowChanged.connect(self.update_selected_row)
 
         self.list_widget.navigateRight.connect(self.navigate_right)
         self.list_widget.navigateLeft.connect(self.navigate_left)
+        self.list_widget.closeRequested.connect(self.close)
 
         layout.addWidget(self.list_widget)
 
@@ -275,7 +279,6 @@ class DefaultMenu(QWidget):
     def send_shader(self, name):
         packet = osc_string("/shader") + osc_string(",s") + osc_string(name)
         self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
-
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Escape:
