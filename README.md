@@ -74,3 +74,7 @@ input index on your machine, run:
 ```sh
 python3 -c "import mido; print(*enumerate(mido.get_input_names()), sep='\n')"
 ```
+
+To play a hardcoded audio file, set `AUDIO_FILE_PATH` in `audio.py`, then
+enable `enable_audio` in the Settings page. The audio envelope is sent as
+0–127 OSC values to `/u_x0`.

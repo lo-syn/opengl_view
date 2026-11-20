@@ -1,5 +1,6 @@
 import sys
 
+from audio import AudioHandler
 from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_float, osc_string
@@ -55,10 +56,22 @@ class DefaultMenu(QWidget):
         self.shaders = {"blob": ShaderMenuItem(on_state_msg="on"),
            "shader": ShaderMenuItem(on_state_msg="on")}
 
-        self.settings = {"enable_midi": SettingsMenuItem(on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
+        self.settings = {
+            "enable_midi": SettingsMenuItem(
+                on_state_msg="enabled",
+                off_state_msg="disabled",
+                linked_function=self.set_midi_enabled,
+            ),
+            "enable_audio": SettingsMenuItem(
+                on_state_msg="enabled",
+                off_state_msg="disabled",
+                linked_function=self.set_audio_enabled,
+            ),
+        }
 
         self.browser_handler = BrowserHandler()
         self.osc_handler = OscHandler()
+        self.audio_handler = AudioHandler(self.osc_handler)
         self.active_shader = None
 
         self.setWindowTitle("Default menu")
@@ -193,7 +206,8 @@ class DefaultMenu(QWidget):
         self.message_bar.clear()
 
     def update_active_shader_status(self):
-        shader_name = self.active_shader if self.active_shader is not None else "None"
+        # Add active shader to status bar
+        shader_name = self.active_shader if self.active_shader is not None else ""
         self.status_bar.setText(f"Active Shader: {shader_name}")
 
     def set_midi_enabled(self, enabled: bool) -> bool:
@@ -222,6 +236,20 @@ class DefaultMenu(QWidget):
             self.midi_handler.close_midi_input()
             self.midi_handler = None
         return False
+
+    def set_audio_enabled(self, enabled: bool) -> bool:
+        try:
+            if enabled:
+                self.audio_handler.play()
+            else:
+                self.audio_handler.stop()
+        except OSError as error:
+            operation = "enable" if enabled else "disable"
+            self.message_bar.setText(
+                f"Could not {operation} audio: {error}"
+            )
+            return False
+        return enabled
 
     def _create_row(self, name: str, menu_item: DefaultMenuItem):
         row = QWidget()
