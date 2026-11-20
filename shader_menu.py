@@ -1,6 +1,5 @@
 import sys
 
-from audio import AudioHandler
 from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_float, osc_string
@@ -71,7 +70,7 @@ class DefaultMenu(QWidget):
 
         self.browser_handler = BrowserHandler()
         self.osc_handler = OscHandler()
-        self.audio_handler = AudioHandler(self.osc_handler)
+        self.audio_handler = None
         self.active_shader = None
 
         self.setWindowTitle("Default menu")
@@ -240,10 +239,14 @@ class DefaultMenu(QWidget):
     def set_audio_enabled(self, enabled: bool) -> bool:
         try:
             if enabled:
+                if self.audio_handler is None:
+                    from audio import AudioHandler
+
+                    self.audio_handler = AudioHandler(self.osc_handler)
                 self.audio_handler.play()
-            else:
+            elif self.audio_handler is not None:
                 self.audio_handler.stop()
-        except OSError as error:
+        except (ImportError, OSError) as error:
             operation = "enable" if enabled else "disable"
             self.message_bar.setText(
                 f"Could not {operation} audio: {error}"
