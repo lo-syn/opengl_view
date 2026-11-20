@@ -75,6 +75,8 @@ void ofApp::update(){
 			shaderValue = &shaderX1;
 		}else if(address == "/u_x2"){
 			shaderValue = &shaderX2;
+		}else if(address == "/u_x3"){
+			shaderValue = &shaderX3;
 		}else{
 			continue;
 		}
@@ -114,6 +116,7 @@ void ofApp::draw(){
 	shader.setUniform1f("u_x0", shaderX0);
 	shader.setUniform1f("u_x1", shaderX1);
 	shader.setUniform1f("u_x2", shaderX2);
+	shader.setUniform1f("u_x3", shaderX3);
 	ofDrawRectangle(0, 0, ofGetWidth(), ofGetHeight());
 	shader.end();
 }

@@ -1,6 +1,6 @@
 import mido
 
-from osc_handler import OscHandler, osc_float, OSC_HOST, OSC_PORT
+from osc_handler import OscHandler
 
 
 MIDI_INPUT_INDEX = 1  # Default MIDI input index
@@ -9,6 +9,12 @@ MIDI_CC_TO_OSC = {
     121: "/u_x1",
     122: "/u_x2",
     123: "/u_x3"
+}
+MIDI_AUDIO_GAIN_CC_TO_OSC = {
+    16: MIDI_CC_TO_OSC[120],
+    17: MIDI_CC_TO_OSC[121],
+    18: MIDI_CC_TO_OSC[122],
+    19: MIDI_CC_TO_OSC[123],
 }
 
 class MidiHandler:
@@ -35,12 +41,14 @@ class MidiHandler:
         for message in self.midi_input.iter_pending():
             if message.type != "control_change":
                 continue
-            address = MIDI_CC_TO_OSC.get(message.control)
-            if address is None:
-                continue
             value = message.value / 127.0
-            packet = osc_float(address, value)
-            self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
+            address = MIDI_CC_TO_OSC.get(message.control)
+            if address is not None:
+                self.osc_handler.set_level(address, "midi", value)
+                continue
+            address = MIDI_AUDIO_GAIN_CC_TO_OSC.get(message.control)
+            if address is not None:
+                self.osc_handler.set_audio_gain(address, value)
 
     def read_midi_messages(self):
         if self.midi_input is not None:

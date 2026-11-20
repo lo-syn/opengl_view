@@ -66,9 +66,9 @@ marked `on` at the right. Activating the active shader again resets the
 renderer, and `Reset` always resets it. The renderer keeps its currently loaded
 shader if a new shader fails to load.
 
-The menu also reads MIDI from input-list index `16` (the seventeenth input,
-since indices start at zero). MIDI control changes `0`, `1`, and `2` are sent
-as normalized float values to `/u_x0`, `/u_x1`, and `/u_x2`. To confirm the
+The menu also reads MIDI from input-list index `1` (the second input,
+since indices start at zero). MIDI control changes `120`–`123` are sent
+as normalized float values to `/u_x0`–`/u_x3`. To confirm the
 input index on your machine, run:
 
 ```sh
@@ -76,5 +76,11 @@ python3 -c "import mido; print(*enumerate(mido.get_input_names()), sep='\n')"
 ```
 
 To play a hardcoded audio file, set `AUDIO_FILE_PATH` in `audio.py`, then
-enable `enable_audio` in the Settings page. The audio envelope is sent as
-0–127 OSC values to `/u_x0`.
+enable `enable_audio` in the Settings page. The default path is relative to
+the project directory, regardless of the launch directory. The audio envelope
+is added to the latest MIDI value on each of `/u_x0`–`/u_x3` and sent as a
+normalized OSC float, capped at 1.0 (equivalent to MIDI 127). Stopping audio
+removes its contribution; MIDI values remain at their last received levels.
+MIDI CC `16`–`19` control the audio contribution for `/u_x0`–`/u_x3`
+respectively: 0 mutes it and 127 applies it at full strength. Each channel
+defaults to full strength until its gain control is received.

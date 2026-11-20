@@ -12,12 +12,14 @@ from PyQt6.QtMultimedia import (
     QMediaPlayer,
 )
 
-from osc_handler import OSC_HOST, OSC_PORT, OscHandler, osc_string
+from midi_handler import MIDI_CC_TO_OSC
+from osc_handler import OscHandler
 
 
-AUDIO_FILE_PATH = Path(r".\bin\data\Plata - Kru (MssingNo Remix).mp3")
-AUDIO_OSC_ADDRESS = "/u_x0"
-LEVEL_MAX = 127
+AUDIO_FILE_PATH = (
+    Path(__file__).resolve().parent / "bin" / "data" / "Plata - Kru (MssingNo Remix).mp3"
+)
+AUDIO_OSC_ADDRESSES = tuple(MIDI_CC_TO_OSC.values())
 ATTACK_SECONDS = 0.01
 RELEASE_SECONDS = 0.15
 
@@ -29,14 +31,16 @@ class AudioHandler:
         self,
         osc_handler: OscHandler,
         file_path: Path | str = AUDIO_FILE_PATH,
-        osc_address: str = AUDIO_OSC_ADDRESS,
+        osc_address: str | None = None,
     ):
         self.osc_handler = osc_handler
         self.file_path = Path(file_path)
-        self.osc_address = osc_address
-        self.level = 0
+        self.osc_addresses = (
+            (osc_address,) if osc_address is not None else AUDIO_OSC_ADDRESSES
+        )
+        self.level = 0.0
         self._envelope = 0.0
-        self._last_sent_level: int | None = None
+        self._last_sent_level: float | None = None
 
         self.audio_output = QAudioOutput()
         self.player = QMediaPlayer()
@@ -55,14 +59,14 @@ class AudioHandler:
 
         self._envelope = 0.0
         self._last_sent_level = None
-        self._set_level(0)
+        self._set_level(0.0)
         self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
         self.player.play()
 
     def stop(self) -> None:
         self.player.stop()
         self._envelope = 0.0
-        self._set_level(0)
+        self._set_level(0.0)
 
     def _process_audio_buffer(self, buffer: QAudioBuffer) -> None:
         if not buffer.isValid() or buffer.sampleCount() == 0:
@@ -82,7 +86,7 @@ class AudioHandler:
         )
         coefficient = math.exp(-duration / time_constant)
         self._envelope = peak + (self._envelope - peak) * coefficient
-        self._set_level(round(self._envelope * LEVEL_MAX))
+        self._set_level(self._envelope)
 
     @staticmethod
     def _peak_amplitude(raw_samples: bytes, sample_format: QAudioFormat.SampleFormat) -> float:
@@ -107,23 +111,19 @@ class AudioHandler:
             peak = max(peak, abs(sample / scale))
         return min(peak, 1.0)
 
-    def _set_level(self, level: int) -> None:
-        self.level = max(0, min(LEVEL_MAX, level))
+    def _set_level(self, level: float) -> None:
+        self.level = max(0.0, min(1.0, level))
         if self.level == self._last_sent_level:
             return
 
-        packet = (
-            osc_string(self.osc_address)
-            + osc_string(",i")
-            + struct.pack(">i", self.level)
-        )
-        self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
+        for address in self.osc_addresses:
+            self.osc_handler.set_level(address, "audio", self.level)
         self._last_sent_level = self.level
 
     def _handle_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self._envelope = 0.0
-            self._set_level(0)
+            self._set_level(0.0)
 
     @staticmethod
     def _handle_player_error(
