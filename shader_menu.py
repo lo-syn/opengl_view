@@ -1,5 +1,6 @@
 import sys
 
+from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_float, osc_string
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
@@ -53,6 +54,7 @@ class DefaultMenu(QWidget):
 
         self.settings = {"enable_midi": SettingsMenuItem(on_state_msg="enabled", off_state_msg="disabled", linked_function=self.set_midi_enabled)}
 
+        self.browser_handler = BrowserHandler()
         self.osc_handler = OscHandler()
         self.active_shader = None
 
@@ -89,8 +91,8 @@ class DefaultMenu(QWidget):
         self.list_widget.itemActivated.connect(self.activate_item)
         self.list_widget.currentRowChanged.connect(self.update_selected_row)
 
-        self.list_widget.navigateRight.connect(self.show_settings)
-        self.list_widget.navigateLeft.connect(self.show_shaders)
+        self.list_widget.navigateRight.connect(self.navigate_right)
+        self.list_widget.navigateLeft.connect(self.navigate_left)
 
         layout.addWidget(self.list_widget)
 
@@ -148,6 +150,30 @@ class DefaultMenu(QWidget):
         self._populate_menu(self.settings)
         self.list_widget.setCurrentRow(0)
 
+    def show_browser(self):
+        # Show browser menu
+        self.clear_message()
+        self.current_page = "browser"
+        self.title.setText("BROWSER")
+        try:
+            self.browser_handler.populate(self.list_widget)
+        except OSError as error:
+            self.message_bar.setText(f"Could not read browser directory: {error}")
+            return
+        self.list_widget.setCurrentRow(0)
+
+    def navigate_right(self):
+        if self.current_page == "shaders":
+            self.show_settings()
+        elif self.current_page == "settings":
+            self.show_browser()
+
+    def navigate_left(self):
+        if self.current_page == "browser":
+            self.show_settings()
+        elif self.current_page == "settings":
+            self.show_shaders()
+
     def clear_message(self):
         self.message_bar.clear()
 
@@ -195,7 +221,8 @@ class DefaultMenu(QWidget):
 
     def _run_settings_option(self, name: str):
         if name not in self.settings.keys():
-            raise ValueError("Attempting to run missing setting")
+            self.message_bar.setText("Attempting to run missing setting")
+            return
         current_setting: SettingsMenuItem = self.settings[name]
         current_state = current_setting.state
         state = current_setting.linked_function(not current_state)
@@ -207,7 +234,8 @@ class DefaultMenu(QWidget):
 
     def _run_shader_option(self, name: str):
         if name not in self.shaders.keys():
-            raise ValueError("Attempting to run missing shader")
+            self.message_bar.setText("Attempting to run missing shader")
+            return
         current_shader: ShaderMenuItem = self.shaders[name]
         # Reset if already active
         if self.active_shader == name:
@@ -236,6 +264,12 @@ class DefaultMenu(QWidget):
             return
         if self.current_page == "shaders":
             self._run_shader_option(name)
+            return
+        if self.current_page == "browser":
+            try:
+                self.browser_handler.toggle_directory(self.list_widget, item)
+            except OSError as error:
+                self.message_bar.setText(f"Could not read directory: {error}")
             return
 
     def send_shader(self, name):

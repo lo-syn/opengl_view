@@ -8,6 +8,7 @@ MIDI_CC_TO_OSC = {
     120: "/u_x0",
     121: "/u_x1",
     122: "/u_x2",
+    123: "/u_x3"
 }
 
 class MidiHandler:
