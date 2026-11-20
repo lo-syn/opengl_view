@@ -2,4 +2,7 @@
 /bin/opengl_viewer
 /bin/opengl_viewer_debug
 /.vscode/browse.db
-/venv
+
+venv/
+.venv/
+env/
