@@ -151,8 +151,8 @@ class DefaultMenu(QWidget):
         self.list_widget.setCurrentRow(0)
 
     def show_browser(self):
-        # Show browser menu
         self.clear_message()
+        # Show browser menu
         self.current_page = "browser"
         self.title.setText("BROWSER")
         try:
@@ -285,7 +285,7 @@ class DefaultMenu(QWidget):
 
     def closeEvent(self, event):
         self.set_midi_enabled(False)
-        self.udp_socket.close()
+        self.osc_handler.udp_socket.close()
         super().closeEvent(event)
 
 
