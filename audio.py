@@ -15,7 +15,7 @@ from PyQt6.QtMultimedia import (
 from osc_handler import OSC_HOST, OSC_PORT, OscHandler, osc_string
 
 
-AUDIO_FILE_PATH = Path(r"C:\Users\Laurence\Documents\Music\Plata - Kru (MssingNo Remix).mp3")
+AUDIO_FILE_PATH = Path(r".\bin\data\Plata - Kru (MssingNo Remix).mp3")
 AUDIO_OSC_ADDRESS = "/u_x0"
 LEVEL_MAX = 127
 ATTACK_SECONDS = 0.01
