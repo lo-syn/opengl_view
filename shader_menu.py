@@ -5,6 +5,7 @@ from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_string
 from audio_handler import AudioHandler
+from bluetooth_audio import BluetoothAudioManager
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -82,6 +83,9 @@ class DefaultMenu(QWidget):
         self.audio_mode = 0
         self.bluetooth_audio_handler = None
         self.file_audio_handler = None
+
+        # Prevent automatic Bluetooth audio passthrough on startup
+        self._prevent_bluetooth_passthrough()
 
         self.setWindowTitle("Default menu")
         self.setWindowFlags(
@@ -219,6 +223,24 @@ class DefaultMenu(QWidget):
         shader_name = self.active_shader if self.active_shader is not None else ""
         self.status_bar.setText(f"Active Shader: {shader_name}")
 
+    def _prevent_bluetooth_passthrough(self) -> None:
+        """Prevent automatic Bluetooth audio passthrough on application startup.
+        
+        This ensures audio doesn't automatically route to Bluetooth devices
+        when they connect to the system. Audio will only be routed to Bluetooth
+        when the user explicitly enables Bluetooth mode in the application.
+        """
+        try:
+            manager = BluetoothAudioManager()
+            manager.prevent_automatic_passthrough()
+            logger.info("Bluetooth passthrough prevention initialized")
+        except OSError:
+            # Bluetooth not available on this system
+            logger.debug("Bluetooth audio not available, passthrough prevention skipped")
+        except Exception as e:
+            # Log but don't fail - passthrough prevention is non-critical
+            logger.warning(f"Could not initialize Bluetooth passthrough prevention: {e}")
+
     def set_midi_enabled(self, enabled: bool) -> bool:
         if enabled:
             if self.midi_handler is not None:
@@ -253,11 +275,20 @@ class DefaultMenu(QWidget):
         
         When enabled=True, advance to next mode.
         When enabled=False, go to disabled mode.
+        
+        When switching away from Bluetooth mode, all Bluetooth audio passthrough is disabled.
+        When switching to Bluetooth mode, Bluetooth audio passthrough is enabled.
         """
         try:
+            # Track previous mode to disable Bluetooth if leaving Bluetooth mode
+            previous_mode = self.audio_mode
+            
             if not enabled:
                 # Disable all audio modes
                 self._stop_all_audio()
+                # If we were in Bluetooth mode, disable all Bluetooth audio passthrough
+                if previous_mode == 1:
+                    self._disable_bluetooth_passthrough()
                 self.audio_mode = 0
                 return False
             
@@ -279,6 +310,8 @@ class DefaultMenu(QWidget):
                 
                 if not devices:
                     self.message_bar.setText("No Bluetooth devices found")
+                    # Reset to disabled mode if no devices found
+                    self.audio_mode = 0
                     return False
                 
                 # Try to reconnect to saved device first
@@ -298,16 +331,20 @@ class DefaultMenu(QWidget):
                 return True
             
             elif self.audio_mode == 2:
-                # Switch to File audio mode
+                # Switch to File audio mode (disable Bluetooth if coming from Bluetooth mode)
                 self._stop_all_audio()
+                if previous_mode == 1:
+                    self._disable_bluetooth_passthrough()
                 if self.file_audio_handler is None:
                     self.file_audio_handler = AudioHandler(self.osc_handler)
                 self.file_audio_handler.play()
                 return True
             
             else:  # audio_mode == 0
-                # Disabled
+                # Disabled (disable Bluetooth if coming from Bluetooth mode)
                 self._stop_all_audio()
+                if previous_mode == 1:
+                    self._disable_bluetooth_passthrough()
                 return False
                 
         except (ImportError, FileNotFoundError) as error:
@@ -329,6 +366,23 @@ class DefaultMenu(QWidget):
                 self.file_audio_handler.stop()
             except Exception:
                 pass
+
+    def _disable_bluetooth_passthrough(self) -> None:
+        """Disable all Bluetooth audio passthrough.
+        
+        This prevents any Bluetooth device from receiving audio until explicitly re-enabled.
+        Called when switching away from Bluetooth audio mode to ensure clean state.
+        """
+        try:
+            manager = BluetoothAudioManager()
+            manager.disable_all_bluetooth_audio()
+            logger.info("All Bluetooth audio passthrough disabled")
+        except OSError:
+            # Bluetooth not available on this system - this is fine
+            logger.debug("Bluetooth audio not available, passthrough disable skipped")
+        except Exception as e:
+            # Log but don't fail - disabling passthrough is non-critical
+            logger.warning(f"Could not disable Bluetooth passthrough: {e}")
 
     def _create_row(self, name: str, menu_item: DefaultMenuItem):
         row = QWidget()

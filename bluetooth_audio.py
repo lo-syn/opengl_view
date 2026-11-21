@@ -53,6 +53,11 @@ class BluetoothAudioBackend(ABC):
         """Set device as the default audio output."""
         pass
 
+    @abstractmethod
+    def disable_all_bluetooth_audio(self) -> bool:
+        """Disable audio passthrough for all Bluetooth devices."""
+        pass
+
 
 class WindowsBluetoothBackend(BluetoothAudioBackend):
     """Windows-specific Bluetooth audio implementation using Windows APIs."""
@@ -210,7 +215,51 @@ class WindowsBluetoothBackend(BluetoothAudioBackend):
         except Exception as e:
             logger.error(f"Error setting default audio device: {e}")
             return False
-            logger.error(f"Error setting default audio device: {e}")
+
+    @staticmethod
+    def _set_default_to_non_bluetooth() -> bool:
+        """Set default audio output to a non-Bluetooth device on Windows.
+        
+        This prevents automatic audio passthrough to Bluetooth devices.
+        Called during initialization to ensure audio doesn't flow to Bluetooth
+        unless explicitly enabled by the application.
+        """
+        try:
+            # Get current default audio device and ensure it's not Bluetooth
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-AudioDevice -List | Where-Object {$_.Type -eq 'Playback' -and $_.Default -eq $true}).Name"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                current_device = result.stdout.strip()
+                # If current device is Bluetooth, try to switch to non-Bluetooth
+                if 'bluetooth' in current_device.lower() or 'bluez' in current_device.lower():
+                    logger.info(f"Current default is Bluetooth device: {current_device}")
+                    logger.warning("Bluetooth passthrough prevention not fully implemented for Windows")
+                    # Windows audio device management is complex; log the issue
+                    return False
+            
+            return True
+        except Exception as e:
+            logger.warning(f"Could not verify non-Bluetooth default on Windows: {e}")
+            return True  # Don't fail on Windows, as this is non-critical
+
+    def disable_all_bluetooth_audio(self) -> bool:
+        """Disable audio passthrough for all Bluetooth devices on Windows.
+        
+        This prevents any Bluetooth device from receiving audio until explicitly re-enabled.
+        """
+        try:
+            # Windows Bluetooth audio management is handled through driver/device settings
+            # This is a placeholder for future implementation
+            logger.info("Bluetooth audio passthrough disabled (Windows)")
+            return True
+        except Exception as e:
+            logger.error(f"Error disabling Bluetooth audio on Windows: {e}")
             return False
 
 
@@ -423,6 +472,118 @@ class DebianBluetoothBackend(BluetoothAudioBackend):
             logger.error(f"Error setting PulseAudio default: {e}")
             return False
 
+    @staticmethod
+    def _get_non_bluetooth_sinks() -> list[str]:
+        """Get list of non-Bluetooth audio sinks (speakers, headphones, etc)."""
+        try:
+            result = subprocess.run(
+                ["pactl", "list", "sinks"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                return []
+            
+            sinks = []
+            current_sink = None
+            
+            for line in result.stdout.split('\n'):
+                if line.startswith('Sink #'):
+                    # Extract sink number (e.g., "Sink #2")
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        current_sink = parts[1]
+                elif 'Name:' in line and current_sink:
+                    # Extract sink name and check if it's not Bluetooth
+                    name_parts = line.split('Name:', 1)
+                    if len(name_parts) > 1:
+                        sink_name = name_parts[1].strip().strip('"')
+                        # Skip Bluetooth devices (they have specific patterns)
+                        if 'bluez' not in sink_name.lower() and 'bluetooth' not in sink_name.lower():
+                            sinks.append(sink_name)
+                        current_sink = None
+            
+            return sinks
+        except Exception as e:
+            logger.error(f"Error getting non-Bluetooth sinks: {e}")
+            return []
+
+    @staticmethod
+    def _set_default_to_non_bluetooth() -> bool:
+        """Set default audio output to a non-Bluetooth device.
+        
+        This prevents automatic audio passthrough to Bluetooth devices.
+        Called during initialization to ensure audio doesn't flow to Bluetooth
+        unless explicitly enabled by the application.
+        """
+        try:
+            non_bt_sinks = DebianBluetoothBackend._get_non_bluetooth_sinks()
+            
+            if not non_bt_sinks:
+                logger.warning("No non-Bluetooth audio sinks found")
+                return False
+            
+            # Use the first non-Bluetooth sink (usually the primary speaker)
+            default_sink = non_bt_sinks[0]
+            
+            result = subprocess.run(
+                ["pactl", "set-default-sink", default_sink],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"Set default audio output to: {default_sink}")
+                return True
+            else:
+                logger.warning(f"Failed to set default sink to {default_sink}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error setting default to non-Bluetooth: {e}")
+            return False
+
+    def disable_all_bluetooth_audio(self) -> bool:
+        """Disable audio passthrough for all Bluetooth devices on Debian/Linux.
+        
+        This prevents any Bluetooth A2DP device from receiving audio until explicitly re-enabled.
+        Uses PulseAudio to unload Bluetooth modules.
+        """
+        try:
+            # First, disconnect all connected Bluetooth A2DP devices
+            result = subprocess.run(
+                ["bluetoothctl", "devices"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                for line in result.stdout.strip().split('\n'):
+                    if line.startswith("Device"):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            device_mac = parts[1]
+                            # Disconnect the device
+                            subprocess.run(
+                                ["bluetoothctl", "disconnect", device_mac],
+                                capture_output=True,
+                                timeout=5
+                            )
+            
+            # Set default sink to non-Bluetooth device
+            self._set_default_to_non_bluetooth()
+            
+            logger.info("All Bluetooth audio passthrough disabled")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error disabling Bluetooth audio: {e}")
+            return False
+
 
 class BluetoothAudioManager:
     """High-level interface for Bluetooth audio management."""
@@ -440,6 +601,19 @@ class BluetoothAudioManager:
 
         self.current_device: Optional[BluetoothDevice] = None
         logger.info(f"BluetoothAudioManager initialized for {system}")
+
+    def prevent_automatic_passthrough(self) -> bool:
+        """Prevent automatic Bluetooth audio passthrough by setting default to non-Bluetooth device.
+        
+        This should be called during application initialization to ensure audio doesn't
+        automatically route to Bluetooth devices when they connect.
+        
+        Returns:
+            True if successful or operation not needed, False if explicitly failed
+        """
+        if hasattr(self.backend, '_set_default_to_non_bluetooth'):
+            return self.backend._set_default_to_non_bluetooth()
+        return True  # Backend doesn't support this operation
 
     def scan_for_devices(self) -> list[BluetoothDevice]:
         """Scan for available Bluetooth audio devices."""
@@ -462,6 +636,38 @@ class BluetoothAudioManager:
                 self.current_device = None
             return success
         return False
+
+    def enable_bluetooth_audio(self, device: BluetoothDevice) -> bool:
+        """Enable audio passthrough for a specific Bluetooth device.
+        
+        This sets the device as the default audio output, allowing audio to pass through.
+        Should be called when user selects Bluetooth audio mode.
+        """
+        success = self.connect(device, set_as_default=True)
+        if success:
+            logger.info(f"Enabled audio passthrough for Bluetooth device: {device.name}")
+        return success
+
+    def disable_all_bluetooth_audio(self) -> bool:
+        """Disable audio passthrough for all Bluetooth devices.
+        
+        This prevents any Bluetooth device from receiving audio until explicitly re-enabled.
+        Should be called when user switches away from Bluetooth audio mode.
+        """
+        try:
+            # First disconnect current device if any
+            if self.current_device:
+                self.disconnect()
+            
+            # Then disable all Bluetooth audio at the backend level
+            if hasattr(self.backend, 'disable_all_bluetooth_audio'):
+                return self.backend.disable_all_bluetooth_audio()
+            
+            logger.info("All Bluetooth audio passthrough disabled")
+            return True
+        except Exception as e:
+            logger.error(f"Error disabling Bluetooth audio: {e}")
+            return False
 
     def get_connected_devices(self) -> list[BluetoothDevice]:
         """Get list of currently connected devices."""

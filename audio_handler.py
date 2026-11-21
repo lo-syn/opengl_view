@@ -54,12 +54,13 @@ class AudioHandler:
         self.buffer_output: Optional[QAudioBufferOutput] = None
 
         # Initialize Bluetooth support if enabled
+        # Bluetooth passthrough is DISABLED by default for safety
         self.bluetooth_manager: Optional[BluetoothAudioManager] = None
+        self.bluetooth_mode_enabled = enable_bluetooth  # Only allow passthrough if explicitly enabled
         self.use_bluetooth = False
         if enable_bluetooth:
             try:
                 self.bluetooth_manager = BluetoothAudioManager()
-                self.use_bluetooth = True
                 logger.info("Bluetooth audio support initialized")
             except OSError as e:
                 logger.warning(f"Bluetooth audio not available: {e}")
@@ -89,39 +90,44 @@ class AudioHandler:
     def play(self, file_path: Path | str | None = None) -> None:
         """Start playing audio.
         
-        If Bluetooth is enabled and connected, plays audio stream through Bluetooth.
+        If Bluetooth mode is enabled and a device is selected, plays audio stream through Bluetooth.
         Otherwise, plays audio file through default speaker/headphones.
         """
         self._envelope = 0.0
         self._last_sent_level = None
         self._set_level(0.0)
         
-        if self.use_bluetooth and self.bluetooth_manager:
+        # Only attempt Bluetooth if mode is explicitly enabled AND device is connected
+        if self.bluetooth_mode_enabled and self.use_bluetooth and self.bluetooth_manager:
             # Play through Bluetooth connection
             logger.info("Starting Bluetooth audio stream")
-            self.bluetooth_manager.start_audio_stream()
-        else:
-            # Initialize audio output if needed
-            if not self._init_audio_output():
-                logger.error("Failed to initialize audio output")
+            if self.bluetooth_manager.start_audio_stream():
                 return
-            
-            # Play audio file through default output
-            audio_path = Path(file_path) if file_path is not None else self.file_path
-            if not audio_path.is_file():
-                raise FileNotFoundError(f"Audio file not found: {audio_path}")
-            
-            logger.info(f"Playing audio file: {audio_path}")
-            self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
-            self.player.play()
+            else:
+                logger.warning("Failed to start Bluetooth audio stream, falling back to default output")
+        
+        # Initialize audio output if needed
+        if not self._init_audio_output():
+            logger.error("Failed to initialize audio output")
+            return
+        
+        # Play audio file through default output
+        audio_path = Path(file_path) if file_path is not None else self.file_path
+        if not audio_path.is_file():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        
+        logger.info(f"Playing audio file: {audio_path}")
+        self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
+        self.player.play()
 
     def stop(self) -> None:
         """Stop all audio playback."""
         if self.use_bluetooth and self.bluetooth_manager:
             # Stop Bluetooth stream
             self.bluetooth_manager.stop_audio_stream()
-        elif self.player is not None:
-            # Stop file playback (only if player was initialized)
+        
+        if self.player is not None:
+            # Stop file playback (always try to stop since we might have fallen back)
             self.player.stop()
         
         self._envelope = 0.0
