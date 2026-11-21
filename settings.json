@@ -21,6 +21,10 @@
             "/u_x1",
             "/u_x2",
             "/u_x3"
-        ]
+        ],
+        "bluetooth": {
+            "device_name": "Laurence's S23",
+            "pulseaudio_input_device": "bluez_source.f8_5b_6e_c1_75_d8.a2dp_source"
+        }
     }
 }
