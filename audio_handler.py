@@ -3,6 +3,7 @@ import math
 import struct
 from pathlib import Path
 import json
+from typing import Optional
 
 from PyQt6.QtCore import QUrl
 from PyQt6.QtMultimedia import (
@@ -13,8 +14,8 @@ from PyQt6.QtMultimedia import (
     QMediaPlayer,
 )
 
-from midi_handler import MIDI_CC_TO_OSC
 from osc_handler import OscHandler
+from bluetooth_audio import BluetoothAudioManager, BluetoothDevice
 
 # Import MIDI related settings from JSON file
 with open("settings.json", "r") as f:
@@ -34,6 +35,7 @@ class AudioHandler:
         osc_handler: OscHandler,
         file_path: Path | str = AUDIO_FILE_PATH,
         osc_address: str | None = None,
+        enable_bluetooth: bool = False,
     ):
         self.osc_handler = osc_handler
         self.file_path = Path(file_path)
@@ -57,20 +59,50 @@ class AudioHandler:
         self.player.mediaStatusChanged.connect(self._handle_media_status)
         self.player.errorOccurred.connect(self._handle_player_error)
 
-    def play(self, file_path: Path | str | None = None) -> None:
-        # Start playing audio file
-        audio_path = Path(file_path) if file_path is not None else self.file_path
-        if not audio_path.is_file():
-            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        # Initialize Bluetooth support if enabled
+        self.bluetooth_manager: Optional[BluetoothAudioManager] = None
+        self.use_bluetooth = False
+        if enable_bluetooth:
+            try:
+                self.bluetooth_manager = BluetoothAudioManager()
+                self.use_bluetooth = True
+                logger.info("Bluetooth audio support initialized")
+            except OSError as e:
+                logger.warning(f"Bluetooth audio not available: {e}")
 
+    def play(self, file_path: Path | str | None = None) -> None:
+        """Start playing audio.
+        
+        If Bluetooth is enabled and connected, plays audio stream through Bluetooth.
+        Otherwise, plays audio file through default speaker/headphones.
+        """
         self._envelope = 0.0
         self._last_sent_level = None
         self._set_level(0.0)
-        self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
-        self.player.play()
+        
+        if self.use_bluetooth and self.bluetooth_manager:
+            # Play through Bluetooth connection
+            logger.info("Starting Bluetooth audio stream")
+            self.bluetooth_manager.start_audio_stream()
+        else:
+            # Play audio file through default output
+            audio_path = Path(file_path) if file_path is not None else self.file_path
+            if not audio_path.is_file():
+                raise FileNotFoundError(f"Audio file not found: {audio_path}")
+            
+            logger.info(f"Playing audio file: {audio_path}")
+            self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
+            self.player.play()
 
     def stop(self) -> None:
-        self.player.stop()
+        """Stop all audio playback."""
+        if self.use_bluetooth and self.bluetooth_manager:
+            # Stop Bluetooth stream
+            self.bluetooth_manager.stop_audio_stream()
+        else:
+            # Stop file playback
+            self.player.stop()
+        
         self._envelope = 0.0
         self._set_level(0.0)
 
@@ -143,3 +175,76 @@ class AudioHandler:
     ) -> None:
         # Log the audio playback error with the error code and message
         logger.error("Audio playback error (%s): %s", error, error_string)
+
+    # Bluetooth audio methods
+    def scan_bluetooth_devices(self) -> list[BluetoothDevice]:
+        """Scan for available Bluetooth audio devices."""
+        if not self.bluetooth_manager:
+            logger.warning("Bluetooth not initialized")
+            return []
+        return self.bluetooth_manager.scan_for_devices()
+
+    def get_connected_bluetooth_devices(self) -> list[BluetoothDevice]:
+        """Get list of currently connected Bluetooth devices."""
+        if not self.bluetooth_manager:
+            return []
+        return self.bluetooth_manager.get_connected_devices()
+
+    def connect_bluetooth_device(
+        self, device: BluetoothDevice, set_as_default: bool = True
+    ) -> bool:
+        """Connect to a Bluetooth audio device."""
+        if not self.bluetooth_manager:
+            logger.error("Bluetooth manager not initialized")
+            return False
+
+        success = self.bluetooth_manager.connect(device, set_as_default)
+        if success:
+            self.use_bluetooth = True
+            logger.info(f"Connected to Bluetooth device: {device.name}")
+        return success
+
+    def disconnect_bluetooth_device(self) -> bool:
+        """Disconnect from the current Bluetooth device."""
+        if not self.bluetooth_manager:
+            return False
+
+        success = self.bluetooth_manager.disconnect()
+        if success:
+            self.use_bluetooth = False
+            logger.info("Disconnected from Bluetooth device")
+        return success
+
+    def enable_bluetooth_output(self, device: BluetoothDevice) -> bool:
+        """Enable audio output to a Bluetooth device."""
+        if not self.bluetooth_manager:
+            logger.error("Bluetooth not available")
+            return False
+
+        # First connect to the device
+        if not self.connect_bluetooth_device(device, set_as_default=True):
+            return False
+
+        self.use_bluetooth = True
+        return True
+
+    def disable_bluetooth_output(self) -> bool:
+        """Disable Bluetooth audio output and return to default."""
+        self.use_bluetooth = False
+        return self.disconnect_bluetooth_device()
+
+    def save_bluetooth_config(self) -> bool:
+        """Save the current Bluetooth device configuration."""
+        if self.bluetooth_manager:
+            return self.bluetooth_manager.save_device_config()
+        return False
+
+    def load_bluetooth_config(self) -> bool:
+        """Load and reconnect to the last used Bluetooth device."""
+        if not self.bluetooth_manager:
+            return False
+
+        device = self.bluetooth_manager.load_device_config()
+        if device:
+            return self.connect_bluetooth_device(device)
+        return False

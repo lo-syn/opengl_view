@@ -8,7 +8,7 @@
 #   The location of your root openFrameworks installation
 #       (default) OF_ROOT = ../../.. 
 ################################################################################
-# OF_ROOT = ../../../
+OF_ROOT = ../of_v0.12.1_msys2_mingw64_release
 
 ################################################################################
 # PROJECT ROOT

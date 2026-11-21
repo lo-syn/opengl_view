@@ -1,4 +1,5 @@
 import sys
+import logging
 
 from browser import BrowserHandler
 from midi_handler import MidiHandler
@@ -17,6 +18,8 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DefaultListWidget(QListWidget):
@@ -63,7 +66,7 @@ class DefaultMenu(QWidget):
                 linked_function=self.set_midi_enabled,
             ),
             "enable_audio": SettingsMenuItem(
-                on_state_msg="enabled",
+                on_state_msg="bluetooth",
                 off_state_msg="disabled",
                 linked_function=self.set_audio_enabled,
             ),
@@ -74,6 +77,11 @@ class DefaultMenu(QWidget):
         self.osc_handler = OscHandler()
         self.audio_handler = None
         self.active_shader = None
+
+        # Audio mode state: 0=disabled, 1=bluetooth, 2=audio_file
+        self.audio_mode = 0
+        self.bluetooth_audio_handler = None
+        self.file_audio_handler = None
 
         self.setWindowTitle("Default menu")
         self.setWindowFlags(
@@ -239,20 +247,84 @@ class DefaultMenu(QWidget):
         return False
 
     def set_audio_enabled(self, enabled: bool) -> bool:
+        """
+        Cycle through audio modes:
+        - Disabled (0) → Bluetooth (1) → Audio File (2) → Disabled (0)
+        
+        When enabled=True, advance to next mode.
+        When enabled=False, go to disabled mode.
+        """
         try:
-            if enabled:
-                if self.audio_handler is None:
-                    self.audio_handler = AudioHandler(self.osc_handler)
-                self.audio_handler.play()
-            elif self.audio_handler is not None:
-                self.audio_handler.stop()
-        except (ImportError, OSError) as error:
-            operation = "enable" if enabled else "disable"
-            self.message_bar.setText(
-                f"Could not {operation} audio: {error}"
-            )
+            if not enabled:
+                # Disable all audio modes
+                self._stop_all_audio()
+                self.audio_mode = 0
+                return False
+            
+            # Cycle to next audio mode: 0 → 1 → 2 → 0
+            self.audio_mode = (self.audio_mode + 1) % 3
+            
+            if self.audio_mode == 1:
+                # Switch to Bluetooth mode
+                self._stop_all_audio()
+                if self.bluetooth_audio_handler is None:
+                    self.bluetooth_audio_handler = AudioHandler(
+                        self.osc_handler,
+                        enable_bluetooth=True
+                    )
+                
+                # Try to scan and connect to first available device
+                devices = self.bluetooth_audio_handler.scan_bluetooth_devices()
+                if devices:
+                    # Try to auto-reconnect to saved device first
+                    try:
+                        if not self.bluetooth_audio_handler.load_bluetooth_config():
+                            # No saved device, connect to first found device
+                            self.bluetooth_audio_handler.connect_bluetooth_device(devices[0])
+                        self.bluetooth_audio_handler.play()
+                        return True
+                    except Exception as e:
+                        # Connection failed but stay in Bluetooth mode (don't auto-fallback)
+                        self.message_bar.setText(f"Bluetooth connection failed: {str(e)}")
+                        logger.error(f"Bluetooth connection error: {e}")
+                        return False
+                else:
+                    # No Bluetooth devices found, show error and stay in Bluetooth mode
+                    self.message_bar.setText("No Bluetooth devices found")
+                    return False
+            
+            elif self.audio_mode == 2:
+                # Switch to File audio mode
+                self._stop_all_audio()
+                if self.file_audio_handler is None:
+                    self.file_audio_handler = AudioHandler(self.osc_handler)
+                self.file_audio_handler.play()
+                return True
+            
+            else:  # audio_mode == 0
+                # Disabled
+                self._stop_all_audio()
+                return False
+                
+        except (ImportError, FileNotFoundError) as error:
+            # Only catch setup errors, not connection errors
+            self._stop_all_audio()
+            self.audio_mode = 0
+            self.message_bar.setText(f"Could not enable audio: {error}")
             return False
-        return enabled
+    
+    def _stop_all_audio(self):
+        """Stop all audio handlers."""
+        if self.bluetooth_audio_handler is not None:
+            try:
+                self.bluetooth_audio_handler.stop()
+            except Exception:
+                pass
+        if self.file_audio_handler is not None:
+            try:
+                self.file_audio_handler.stop()
+            except Exception:
+                pass
 
     def _create_row(self, name: str, menu_item: DefaultMenuItem):
         row = QWidget()
@@ -260,10 +332,16 @@ class DefaultMenu(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.addWidget(QLabel(name))
         row_layout.addStretch()
-        if menu_item.state:
+        
+        # Special handling for audio mode display
+        if name == "enable_audio":
+            audio_mode_names = ["disabled", "bluetooth", "audio_file"]
+            status = QLabel(audio_mode_names[self.audio_mode])
+        elif menu_item.state:
             status = QLabel(menu_item.on_state_msg)
         else:
             status = QLabel(menu_item.off_state_msg)
+        
         status.setObjectName("activeStatus")
         self.status_labels[name] = status
         row_layout.addWidget(status)
@@ -275,12 +353,30 @@ class DefaultMenu(QWidget):
             return
         current_setting: SettingsMenuItem = self.settings[name]
         current_state = current_setting.state
-        state = current_setting.linked_function(not current_state)
-        current_setting.state = state
-        if state:
-            self.status_labels[name].setText(current_setting.on_state_msg)
+        
+        # Special handling for audio mode cycling - always advance mode
+        if name == "enable_audio":
+            # For audio, we always pass True to cycle through modes
+            # We never toggle off/on, we just cycle through 3 modes
+            state = current_setting.linked_function(True)
+            
+            # Always keep button state as True (we're in audio mode selection)
+            # This ensures next press advances to next mode, not toggles back
+            current_setting.state = True
+            
+            # Update label with current mode name
+            audio_mode_names = ["disabled", "bluetooth", "audio_file"]
+            mode_name = audio_mode_names[self.audio_mode]
+            self.status_labels[name].setText(mode_name)
         else:
-            self.status_labels[name].setText(current_setting.off_state_msg)
+            # Normal toggle for other settings
+            state = current_setting.linked_function(not current_state)
+            current_setting.state = state
+            
+            if state:
+                self.status_labels[name].setText(current_setting.on_state_msg)
+            else:
+                self.status_labels[name].setText(current_setting.off_state_msg)
 
     def _run_shader_option(self, name: str):
         if name not in self.shaders.keys():
@@ -336,6 +432,7 @@ class DefaultMenu(QWidget):
 
     def closeEvent(self, event):
         self.set_midi_enabled(False)
+        self._stop_all_audio()
         self.osc_handler.udp_socket.close()
         super().closeEvent(event)
 

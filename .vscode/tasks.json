@@ -72,6 +72,26 @@
         },
         {
             "type": "shell",
+            "label": "Run DEBUG",
+            "command": "bin/${workspaceFolderBasename}_debug.exe",
+            "windows": {
+                "command": "bin/*.exe"
+            }
+        },
+        {
+            "label": "Build and Run Debug",
+            "dependsOn": [
+                "Build DEBUG",
+                "Run DEBUG"
+            ],
+            "dependsOrder": "sequence",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "type": "shell",
             "label": "Clean DEBUG",
             "command": "make CleanDebug"
         },
