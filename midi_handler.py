@@ -1,21 +1,17 @@
 import mido
+import json
 
 from osc_handler import OscHandler
 
 
-MIDI_INPUT_INDEX = 1  # Default MIDI input index
-MIDI_CC_TO_OSC = {
-    120: "/u_x0",
-    121: "/u_x1",
-    122: "/u_x2",
-    123: "/u_x3"
-}
-MIDI_AUDIO_GAIN_CC_TO_OSC = {
-    16: MIDI_CC_TO_OSC[120],
-    17: MIDI_CC_TO_OSC[121],
-    18: MIDI_CC_TO_OSC[122],
-    19: MIDI_CC_TO_OSC[123],
-}
+
+# Import MIDI related settings from JSON file
+with open("settings.json", "r") as f:
+    settings = json.load(f)
+
+MIDI_INPUT_INDEX: int = settings["midi"].get("midi_input_index")  # Default MIDI input index
+MIDI_CC_TO_OSC: dict[int, str] = {int(k): v for k, v in settings["midi"]["midi_cc_to_osc"].items()}
+MIDI_AUDIO_GAIN_CC_TO_OSC: dict[int, str] = {int(k): v for k, v in settings["midi"]["midi_audio_gain_cc_to_osc"].items()}
 
 class MidiHandler:
     def __init__(self, osc_handler: OscHandler):

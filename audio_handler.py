@@ -2,6 +2,7 @@ import logging
 import math
 import struct
 from pathlib import Path
+import json
 
 from PyQt6.QtCore import QUrl
 from PyQt6.QtMultimedia import (
@@ -15,11 +16,12 @@ from PyQt6.QtMultimedia import (
 from midi_handler import MIDI_CC_TO_OSC
 from osc_handler import OscHandler
 
+# Import MIDI related settings from JSON file
+with open("settings.json", "r") as f:
+    settings = json.load(f)
 
-AUDIO_FILE_PATH = (
-    Path(__file__).resolve().parent / "bin" / "data" / "Plata - Kru (MssingNo Remix).mp3"
-)
-AUDIO_OSC_ADDRESSES = tuple(MIDI_CC_TO_OSC.values())
+AUDIO_FILE_PATH = Path(__file__).resolve().parent / settings["audio"]["file_path"]
+AUDIO_OSC_ADDRESSES = settings["audio"]["osc_addresses"]
 ATTACK_SECONDS = 0.01
 RELEASE_SECONDS = 0.15
 
@@ -38,10 +40,13 @@ class AudioHandler:
         self.osc_addresses = (
             (osc_address,) if osc_address is not None else AUDIO_OSC_ADDRESSES
         )
+
+        # Initialize audio level and envelope tracking variables
         self.level = 0.0
         self._envelope = 0.0
         self._last_sent_level: float | None = None
 
+        # Configure audio output, media player and activate audio buffer output
         self.audio_output = QAudioOutput()
         self.player = QMediaPlayer()
         self.player.setAudioOutput(self.audio_output)
@@ -53,6 +58,7 @@ class AudioHandler:
         self.player.errorOccurred.connect(self._handle_player_error)
 
     def play(self, file_path: Path | str | None = None) -> None:
+        # Start playing audio file
         audio_path = Path(file_path) if file_path is not None else self.file_path
         if not audio_path.is_file():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
@@ -90,6 +96,7 @@ class AudioHandler:
 
     @staticmethod
     def _peak_amplitude(raw_samples: bytes, sample_format: QAudioFormat.SampleFormat) -> float:
+        # Caculates peak amplitude of the audio samples based on the sample format
         peak = 0.0
         if sample_format == QAudioFormat.SampleFormat.UInt8:
             return max(
@@ -97,6 +104,7 @@ class AudioHandler:
                 default=0.0,
             )
 
+        # Determine sample code, size, and scale based on the sample format
         if sample_format == QAudioFormat.SampleFormat.Int16:
             sample_code, sample_size, scale = "h", 2, 32768.0
         elif sample_format == QAudioFormat.SampleFormat.Int32:
@@ -106,21 +114,25 @@ class AudioHandler:
         else:
             raise ValueError(f"Unsupported audio sample format: {sample_format}")
 
+        # Iterate through the raw samples and calculate the peak amplitude
         for offset in range(0, len(raw_samples) - sample_size + 1, sample_size):
             sample = struct.unpack_from("=" + sample_code, raw_samples, offset)[0]
             peak = max(peak, abs(sample / scale))
         return min(peak, 1.0)
 
     def _set_level(self, level: float) -> None:
+        # Clamp the level to the range [0.0, 1.0]
         self.level = max(0.0, min(1.0, level))
         if self.level == self._last_sent_level:
             return
 
+        # Send the updated level to all OSC addresses if it has changed
         for address in self.osc_addresses:
             self.osc_handler.set_level(address, "audio", self.level)
         self._last_sent_level = self.level
 
     def _handle_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
+        # Handle different media statuses, such as end of media
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self._envelope = 0.0
             self._set_level(0.0)
@@ -129,4 +141,5 @@ class AudioHandler:
     def _handle_player_error(
         error: QMediaPlayer.Error, error_string: str
     ) -> None:
+        # Log the audio playback error with the error code and message
         logger.error("Audio playback error (%s): %s", error, error_string)

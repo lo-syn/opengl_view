@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import mido
 from PyQt6.QtMultimedia import QAudioFormat
 
-from audio import ATTACK_SECONDS, AudioHandler
+from audio_handler import ATTACK_SECONDS, AudioHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler
 

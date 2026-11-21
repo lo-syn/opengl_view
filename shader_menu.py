@@ -2,7 +2,8 @@ import sys
 
 from browser import BrowserHandler
 from midi_handler import MidiHandler
-from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_float, osc_string
+from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_string
+from audio_handler import AudioHandler
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -68,6 +69,7 @@ class DefaultMenu(QWidget):
             ),
         }
 
+        # Add handlers
         self.browser_handler = BrowserHandler()
         self.osc_handler = OscHandler()
         self.audio_handler = None
@@ -240,8 +242,6 @@ class DefaultMenu(QWidget):
         try:
             if enabled:
                 if self.audio_handler is None:
-                    from audio import AudioHandler
-
                     self.audio_handler = AudioHandler(self.osc_handler)
                 self.audio_handler.play()
             elif self.audio_handler is not None:
