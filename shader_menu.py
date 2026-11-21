@@ -199,7 +199,7 @@ class DefaultMenu(QWidget):
         try:
             self.browser_handler.populate(self.list_widget)
         except OSError as error:
-            self.message_bar.setText(f"Could not read browser directory: {error}")
+            self._update_message(f"Could not read browser directory: {error}")
             return
         self.list_widget.setCurrentRow(0)
 
@@ -250,7 +250,7 @@ class DefaultMenu(QWidget):
                 midi_handler.open_midi_input()
             except Exception as error:
                 self.status_labels["enable_midi"].setText("disabled")
-                self.message_bar.setText(f"Could not enable MIDI: {error}")
+                self._update_message(f"Could not enable MIDI: {error}")
                 return False
 
             self.midi_handler = midi_handler
@@ -305,25 +305,25 @@ class DefaultMenu(QWidget):
                     )
                 
                 # Scan for available devices without blocking
-                self.message_bar.setText("Scanning for Bluetooth devices...")
+                self._update_message("Scanning for Bluetooth devices...")
                 devices = self.bluetooth_audio_handler.scan_bluetooth_devices()
                 
                 if not devices:
-                    self.message_bar.setText("No Bluetooth devices found")
+                    self._update_message("No Bluetooth devices found")
                     # Reset to disabled mode if no devices found
                     self.audio_mode = 0
                     return False
                 
                 # Try to reconnect to saved device first
                 if self.bluetooth_audio_handler.load_bluetooth_config():
-                    self.message_bar.setText("Reconnected to saved device")
+                    self._update_message("Reconnected to saved device")
                     self.bluetooth_audio_handler.play()
                     return True
                 
                 # No saved device, show user available devices in UI
                 # Don't auto-connect - let user select which device to use
                 device_names = [f"{dev.name} ({dev.mac_address})" for dev in devices]
-                self.message_bar.setText(f"Found devices: {', '.join(device_names[:2])}")
+                self._update_message(f"Found devices: {', '.join(device_names[:2])}")
                 logger.info(f"Found {len(devices)} Bluetooth devices: {device_names}")
                 
                 # For now, just show the available devices without connecting
@@ -351,7 +351,7 @@ class DefaultMenu(QWidget):
             # Only catch setup errors, not connection errors
             self._stop_all_audio()
             self.audio_mode = 0
-            self.message_bar.setText(f"Could not enable audio: {error}")
+            self._update_message(f"Could not enable audio: {error}")
             return False
     
     def _stop_all_audio(self):
@@ -384,6 +384,15 @@ class DefaultMenu(QWidget):
             # Log but don't fail - disabling passthrough is non-critical
             logger.warning(f"Could not disable Bluetooth passthrough: {e}")
 
+    def _update_message(self, text: str) -> None:
+        """Update message bar text and immediately refresh the GUI.
+        
+        This ensures the message is visible even during long-running operations.
+        Without processEvents(), the message won't appear until the function completes.
+        """
+        self.message_bar.setText(text)
+        QApplication.processEvents()
+
     def _create_row(self, name: str, menu_item: DefaultMenuItem):
         row = QWidget()
         row_layout = QHBoxLayout(row)
@@ -407,7 +416,7 @@ class DefaultMenu(QWidget):
 
     def _run_settings_option(self, name: str):
         if name not in self.settings.keys():
-            self.message_bar.setText("Attempting to run missing setting")
+            self._update_message("Attempting to run missing setting")
             return
         current_setting: SettingsMenuItem = self.settings[name]
         current_state = current_setting.state
@@ -438,7 +447,7 @@ class DefaultMenu(QWidget):
 
     def _run_shader_option(self, name: str):
         if name not in self.shaders.keys():
-            self.message_bar.setText("Attempting to run missing shader")
+            self._update_message("Attempting to run missing shader")
             return
         current_shader: ShaderMenuItem = self.shaders[name]
         # Reset if already active
@@ -475,7 +484,7 @@ class DefaultMenu(QWidget):
             try:
                 self.browser_handler.toggle_directory(self.list_widget, item)
             except OSError as error:
-                self.message_bar.setText(f"Could not read directory: {error}")
+                self._update_message(f"Could not read directory: {error}")
             return
 
     def send_shader(self, name):
