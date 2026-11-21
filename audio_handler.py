@@ -3,7 +3,7 @@ import math
 import struct
 from pathlib import Path
 import json
-from typing import Optional
+from typing import Optional, Callable
 
 from PyQt6.QtCore import QUrl
 from PyQt6.QtMultimedia import (
@@ -48,16 +48,10 @@ class AudioHandler:
         self._envelope = 0.0
         self._last_sent_level: float | None = None
 
-        # Configure audio output, media player and activate audio buffer output
-        self.audio_output = QAudioOutput()
-        self.player = QMediaPlayer()
-        self.player.setAudioOutput(self.audio_output)
-
-        self.buffer_output = QAudioBufferOutput()
-        self.player.setAudioBufferOutput(self.buffer_output)
-        self.buffer_output.audioBufferReceived.connect(self._process_audio_buffer)
-        self.player.mediaStatusChanged.connect(self._handle_media_status)
-        self.player.errorOccurred.connect(self._handle_player_error)
+        # Lazy initialization - create audio objects only when needed
+        self.audio_output: Optional[QAudioOutput] = None
+        self.player: Optional[QMediaPlayer] = None
+        self.buffer_output: Optional[QAudioBufferOutput] = None
 
         # Initialize Bluetooth support if enabled
         self.bluetooth_manager: Optional[BluetoothAudioManager] = None
@@ -69,6 +63,28 @@ class AudioHandler:
                 logger.info("Bluetooth audio support initialized")
             except OSError as e:
                 logger.warning(f"Bluetooth audio not available: {e}")
+
+    def _init_audio_output(self) -> bool:
+        """Initialize audio output objects (called on first use)."""
+        if self.player is not None:
+            return True  # Already initialized
+
+        try:
+            # Configure audio output, media player and activate audio buffer output
+            self.audio_output = QAudioOutput()
+            self.player = QMediaPlayer()
+            self.player.setAudioOutput(self.audio_output)
+
+            self.buffer_output = QAudioBufferOutput()
+            self.player.setAudioBufferOutput(self.buffer_output)
+            self.buffer_output.audioBufferReceived.connect(self._process_audio_buffer)
+            self.player.mediaStatusChanged.connect(self._handle_media_status)
+            self.player.errorOccurred.connect(self._handle_player_error)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize audio output: {e}")
+            return False
 
     def play(self, file_path: Path | str | None = None) -> None:
         """Start playing audio.
@@ -85,6 +101,11 @@ class AudioHandler:
             logger.info("Starting Bluetooth audio stream")
             self.bluetooth_manager.start_audio_stream()
         else:
+            # Initialize audio output if needed
+            if not self._init_audio_output():
+                logger.error("Failed to initialize audio output")
+                return
+            
             # Play audio file through default output
             audio_path = Path(file_path) if file_path is not None else self.file_path
             if not audio_path.is_file():
@@ -99,8 +120,8 @@ class AudioHandler:
         if self.use_bluetooth and self.bluetooth_manager:
             # Stop Bluetooth stream
             self.bluetooth_manager.stop_audio_stream()
-        else:
-            # Stop file playback
+        elif self.player is not None:
+            # Stop file playback (only if player was initialized)
             self.player.stop()
         
         self._envelope = 0.0
@@ -203,6 +224,37 @@ class AudioHandler:
             self.use_bluetooth = True
             logger.info(f"Connected to Bluetooth device: {device.name}")
         return success
+
+    def connect_bluetooth_device_async(
+        self, device: BluetoothDevice, 
+        callback: Optional[Callable[[bool, str], None]] = None,
+        set_as_default: bool = True
+    ) -> None:
+        """Connect to a Bluetooth device asynchronously (non-blocking).
+        
+        Args:
+            device: Device to connect to
+            callback: Function called with (success, message) when complete
+            set_as_default: Whether to set as default audio output
+        """
+        if not self.bluetooth_manager:
+            if callback:
+                callback(False, "Bluetooth not initialized")
+            return
+        
+        def on_connect(success):
+            if success:
+                self.use_bluetooth = True
+                message = f"Connected to {device.name}"
+                logger.info(message)
+            else:
+                message = f"Failed to connect to {device.name}"
+                logger.warning(message)
+            
+            if callback:
+                callback(success, message)
+        
+        self.bluetooth_manager.connect_async(device, on_connect, set_as_default)
 
     def disconnect_bluetooth_device(self) -> bool:
         """Disconnect from the current Bluetooth device."""

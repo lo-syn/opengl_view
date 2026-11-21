@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Callable
+from threading import Thread
 
 logger = logging.getLogger(__name__)
 
@@ -245,19 +246,12 @@ class DebianBluetoothBackend(BluetoothAudioBackend):
         """Scan for Bluetooth devices on Debian/Linux using bluetoothctl."""
         devices = []
         try:
-            # Start Bluetooth scan
-            subprocess.run(
-                ["bluetoothctl", "scan", "on"],
-                capture_output=True,
-                timeout=2
-            )
-
-            # Get available devices
+            # Get available devices from device cache (no interactive scan)
             result = subprocess.run(
                 ["bluetoothctl", "devices"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=5
             )
 
             if result.returncode == 0:
@@ -275,13 +269,6 @@ class DebianBluetoothBackend(BluetoothAudioBackend):
                 logger.info(f"Found {len(devices)} Bluetooth devices")
             else:
                 logger.warning(f"Failed to scan devices: {result.stderr}")
-
-            # Stop scan
-            subprocess.run(
-                ["bluetoothctl", "scan", "off"],
-                capture_output=True,
-                timeout=2
-            )
 
         except subprocess.TimeoutExpired:
             logger.error("Bluetooth scan timed out")
@@ -323,7 +310,7 @@ class DebianBluetoothBackend(BluetoothAudioBackend):
                 ["bluetoothctl", "connect", device.mac_address],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=5
             )
 
             if result.returncode == 0 or "already connected" in result.stdout.lower():
@@ -534,3 +521,41 @@ class BluetoothAudioManager:
         
         logger.info(f"Stopping audio stream to {self.current_device.name}")
         return True
+
+    def scan_for_devices_async(self, callback: Callable[[list[BluetoothDevice]], None]) -> Thread:
+        """Scan for Bluetooth devices asynchronously in a background thread.
+        
+        Args:
+            callback: Function to call with the list of devices when scan completes
+            
+        Returns:
+            The Thread object so caller can join() if needed
+        """
+        def _scan():
+            devices = self.scan_for_devices()
+            callback(devices)
+        
+        thread = Thread(target=_scan, daemon=True)
+        thread.start()
+        return thread
+
+    def connect_async(self, device: BluetoothDevice, 
+                     callback: Callable[[bool], None], 
+                     set_as_default: bool = True) -> Thread:
+        """Connect to a Bluetooth device asynchronously.
+        
+        Args:
+            device: Device to connect to
+            callback: Function to call with success/failure boolean when complete
+            set_as_default: Whether to set as default audio output
+            
+        Returns:
+            The Thread object so caller can join() if needed
+        """
+        def _connect():
+            success = self.connect(device, set_as_default)
+            callback(success)
+        
+        thread = Thread(target=_connect, daemon=True)
+        thread.start()
+        return thread

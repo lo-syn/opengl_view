@@ -273,25 +273,29 @@ class DefaultMenu(QWidget):
                         enable_bluetooth=True
                     )
                 
-                # Try to scan and connect to first available device
+                # Scan for available devices without blocking
+                self.message_bar.setText("Scanning for Bluetooth devices...")
                 devices = self.bluetooth_audio_handler.scan_bluetooth_devices()
-                if devices:
-                    # Try to auto-reconnect to saved device first
-                    try:
-                        if not self.bluetooth_audio_handler.load_bluetooth_config():
-                            # No saved device, connect to first found device
-                            self.bluetooth_audio_handler.connect_bluetooth_device(devices[0])
-                        self.bluetooth_audio_handler.play()
-                        return True
-                    except Exception as e:
-                        # Connection failed but stay in Bluetooth mode (don't auto-fallback)
-                        self.message_bar.setText(f"Bluetooth connection failed: {str(e)}")
-                        logger.error(f"Bluetooth connection error: {e}")
-                        return False
-                else:
-                    # No Bluetooth devices found, show error and stay in Bluetooth mode
+                
+                if not devices:
                     self.message_bar.setText("No Bluetooth devices found")
                     return False
+                
+                # Try to reconnect to saved device first
+                if self.bluetooth_audio_handler.load_bluetooth_config():
+                    self.message_bar.setText("Reconnected to saved device")
+                    self.bluetooth_audio_handler.play()
+                    return True
+                
+                # No saved device, show user available devices in UI
+                # Don't auto-connect - let user select which device to use
+                device_names = [f"{dev.name} ({dev.mac_address})" for dev in devices]
+                self.message_bar.setText(f"Found devices: {', '.join(device_names[:2])}")
+                logger.info(f"Found {len(devices)} Bluetooth devices: {device_names}")
+                
+                # For now, just show the available devices without connecting
+                # User can pair their device first if needed
+                return True
             
             elif self.audio_mode == 2:
                 # Switch to File audio mode
