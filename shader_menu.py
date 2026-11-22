@@ -67,8 +67,7 @@ class DefaultMenu(QWidget):
                 linked_function=self.set_midi_enabled,
             ),
             "enable_audio": SettingsMenuItem(
-                on_state_msg="bluetooth",
-                off_state_msg="disabled",
+                status_labels=["disabled", "bluetooth", "audio_file"],
                 linked_function=self.set_audio_enabled,
             ),
         }
@@ -137,6 +136,7 @@ class DefaultMenu(QWidget):
 
         layout.addWidget(self.list_widget)
 
+        # Create message bar
         self.message_bar = QLabel()
         self.message_bar.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -233,7 +233,6 @@ class DefaultMenu(QWidget):
         """
         try:
             manager = BluetoothAudioManager()
-            manager.prevent_automatic_passthrough()
             manager.disable_all_bluetooth_audio()
             logger.info("Bluetooth audio disabled on startup - Bluetooth mode must be explicitly enabled")
         except OSError:
@@ -430,8 +429,7 @@ class DefaultMenu(QWidget):
             current_setting.state = True
             
             # Update label with current mode name
-            audio_mode_names = ["disabled", "bluetooth", "audio_file"]
-            mode_name = audio_mode_names[self.audio_mode]
+            mode_name = self.settings[name].status_labels[self.audio_mode]
             self.status_labels[name].setText(mode_name)
         else:
             # Normal toggle for other settings

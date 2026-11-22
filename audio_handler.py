@@ -1,14 +1,13 @@
 import logging
 import math
 import os
-import struct
 import subprocess
 from pathlib import Path
 import json
 from typing import Optional, Callable
 
 import numpy as np
-from PyQt6.QtCore import QUrl, QIODevice, QSocketNotifier
+from PyQt6.QtCore import QUrl, QSocketNotifier
 from PyQt6.QtMultimedia import (
     QAudioBuffer,
     QAudioBufferOutput,
@@ -16,7 +15,6 @@ from PyQt6.QtMultimedia import (
     QAudioOutput,
     QAudioInput,
     QMediaPlayer,
-    QMediaDevices,
     QMediaCaptureSession,
 )
 

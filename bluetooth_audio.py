@@ -602,19 +602,6 @@ class BluetoothAudioManager:
         self.current_device: Optional[BluetoothDevice] = None
         logger.info(f"BluetoothAudioManager initialized for {system}")
 
-    def prevent_automatic_passthrough(self) -> bool:
-        """Prevent automatic Bluetooth audio passthrough by setting default to non-Bluetooth device.
-        
-        This should be called during application initialization to ensure audio doesn't
-        automatically route to Bluetooth devices when they connect.
-        
-        Returns:
-            True if successful or operation not needed, False if explicitly failed
-        """
-        if hasattr(self.backend, '_set_default_to_non_bluetooth'):
-            return self.backend._set_default_to_non_bluetooth()
-        return True  # Backend doesn't support this operation
-
     def scan_for_devices(self) -> list[BluetoothDevice]:
         """Scan for available Bluetooth audio devices."""
         return self.backend.scan_devices()
