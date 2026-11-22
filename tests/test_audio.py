@@ -1,12 +1,21 @@
 import math
+import os
 import struct
 import unittest
 from unittest.mock import Mock, patch
 
 import mido
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtMultimedia import QAudioFormat
 
-from audio_handler import ATTACK_SECONDS, AudioHandler
+from audio_handler import (
+    ATTACK_SECONDS,
+    BLUETOOTH_ATTACK_SECONDS,
+    BLUETOOTH_MAX_BUFFER_BYTES,
+    BLUETOOTH_RELEASE_SECONDS,
+    BLUETOOTH_SAMPLE_RATE,
+    AudioHandler,
+)
 from midi_handler import MidiHandler
 from osc_handler import OscHandler
 
@@ -160,6 +169,98 @@ class AudioLevelTests(unittest.TestCase):
             struct.unpack(">f", calls[0].args[0][12:])[0], 32 / 127.0 + 0.5
         )
         self.assertEqual(struct.unpack(">f", calls[1].args[0][12:])[0], 0.0)
+
+
+class BluetoothCaptureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self):
+        self.osc = Mock()
+        self.handler = AudioHandler(self.osc, osc_address="/audio")
+        self.read_fd, self.write_fd = os.pipe()
+        self.process = Mock()
+        self.process.stdout = os.fdopen(self.read_fd, "rb", buffering=0)
+        self.process.poll.return_value = None
+        self.handler.ffmpeg_process = self.process
+        self.handler._setup_bluetooth_audio_processing()
+
+    def tearDown(self):
+        self.handler.stop()
+        if self.write_fd is not None:
+            os.close(self.write_fd)
+
+    def test_notifier_processes_split_frames_without_polling(self):
+        frame = struct.pack("<hh", 32767, 32767)
+        os.write(self.write_fd, frame[:3])
+        self.app.processEvents()
+        self.osc.set_level.assert_not_called()
+
+        os.write(self.write_fd, frame[3:])
+        self.app.processEvents()
+        expected = (32767 / 32768) * (
+            1 - math.exp(-1 / BLUETOOTH_SAMPLE_RATE / BLUETOOTH_ATTACK_SECONDS)
+        )
+        self.osc.set_level.assert_called_once()
+        self.assertAlmostEqual(self.osc.set_level.call_args.args[2], expected)
+
+    def test_backlog_keeps_only_recent_audio(self):
+        old_audio = struct.pack("<hh", 32767, 32767)
+        recent_silence = bytes(BLUETOOTH_MAX_BUFFER_BYTES)
+        os.write(self.write_fd, old_audio + recent_silence)
+        read = os.read
+        with patch(
+            "audio_handler.os.read",
+            side_effect=lambda fd, size: read(fd, min(size, 1000)),
+        ) as read_mock:
+            self.app.processEvents()
+        self.assertGreater(read_mock.call_count, 1)
+        self.osc.set_level.assert_called_once_with("/audio", "audio", 0.0)
+
+    def test_release_and_unexpected_end(self):
+        os.write(self.write_fd, struct.pack("<hh", 32767, 32767) * 441)
+        self.app.processEvents()
+        attack_level = self.handler.level
+        os.write(self.write_fd, bytes(441 * 4))
+        self.app.processEvents()
+        self.assertAlmostEqual(
+            self.handler.level,
+            attack_level * math.exp(-0.01 / BLUETOOTH_RELEASE_SECONDS),
+        )
+        os.close(self.write_fd)
+        self.write_fd = None
+        with self.assertLogs("audio_handler", level="ERROR") as logs:
+            self.app.processEvents()
+        self.assertIn("ended unexpectedly", logs.output[0])
+        self.assertIsNone(self.handler.ffmpeg_process)
+        self.assertEqual(self.handler.level, 0)
+
+    def test_stop_and_restart_capture_with_low_latency_options(self):
+        self.handler.stop()
+        self.assertIsNone(self.handler._bluetooth_notifier)
+        self.assertIsNone(self.handler.ffmpeg_process)
+        self.process.terminate.assert_called_once()
+
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, write_fd)
+        process = Mock()
+        process.stdout = os.fdopen(read_fd, "rb", buffering=0)
+        process.poll.return_value = None
+        self.handler.bluetooth_mode_enabled = True
+        self.handler.use_bluetooth = True
+        self.handler.bluetooth_manager = Mock()
+        with patch("audio_handler.subprocess.Popen", return_value=process) as popen:
+            self.assertTrue(self.handler.start_bluetooth_input_capture())
+        command = popen.call_args.args[0]
+        self.assertIn("--latency-msec=20", command)
+        self.assertIn("--process-time-msec=10", command)
+
+        self.osc.reset_mock()
+        os.write(write_fd, struct.pack("<hh", 32767, 32767) * 441)
+        self.app.processEvents()
+        self.osc.set_level.assert_called_once()
+        self.assertGreater(self.osc.set_level.call_args.args[2], 0.8)
 
 
 if __name__ == "__main__":

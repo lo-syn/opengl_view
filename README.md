@@ -84,3 +84,18 @@ removes its contribution; MIDI values remain at their last received levels.
 MIDI CC `16`–`19` control the audio contribution for `/u_x0`–`/u_x3`
 respectively: 0 mutes it and 127 applies it at full strength. Each channel
 defaults to full strength until its gain control is received.
+
+## Bluetooth audio latency
+
+Bluetooth input uses `pacat` to capture the PulseAudio source configured in
+`settings.json` under `audio.bluetooth.pulseaudio_input_device`. It requests a
+20 ms capture latency and 10 ms processing interval; the audio server may
+choose different values. Audio is processed as it arrives, and when the UI
+falls behind, only the newest 20 ms of queued PCM is analyzed. This favors
+responsiveness over preserving every transient. Bluetooth uses a 5 ms attack
+and 60 ms release; file playback keeps its existing envelope.
+
+Bluetooth transport and the audio server can add latency before capture, and
+renderer updates add further delay. Measure the complete path on the target
+system; wired input or producing OSC at the audio source can avoid Bluetooth
+transport delay.

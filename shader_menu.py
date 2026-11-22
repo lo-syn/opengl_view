@@ -226,14 +226,16 @@ class DefaultMenu(QWidget):
     def _prevent_bluetooth_passthrough(self) -> None:
         """Prevent automatic Bluetooth audio passthrough on application startup.
         
-        This ensures audio doesn't automatically route to Bluetooth devices
-        when they connect to the system. Audio will only be routed to Bluetooth
-        when the user explicitly enables Bluetooth mode in the application.
+        This ensures:
+        1. Bluetooth input is NOT captured at startup
+        2. Audio doesn't automatically route to Bluetooth when devices connect
+        3. Bluetooth mode can only be enabled by explicit user action
         """
         try:
             manager = BluetoothAudioManager()
             manager.prevent_automatic_passthrough()
-            logger.info("Bluetooth passthrough prevention initialized")
+            manager.disable_all_bluetooth_audio()
+            logger.info("Bluetooth audio disabled on startup - Bluetooth mode must be explicitly enabled")
         except OSError:
             # Bluetooth not available on this system
             logger.debug("Bluetooth audio not available, passthrough prevention skipped")
@@ -385,11 +387,7 @@ class DefaultMenu(QWidget):
             logger.warning(f"Could not disable Bluetooth passthrough: {e}")
 
     def _update_message(self, text: str) -> None:
-        """Update message bar text and immediately refresh the GUI.
-        
-        This ensures the message is visible even during long-running operations.
-        Without processEvents(), the message won't appear until the function completes.
-        """
+        """Update message bar text and immediately refresh the GUI """
         self.message_bar.setText(text)
         QApplication.processEvents()
 
@@ -498,13 +496,36 @@ class DefaultMenu(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        """Clean up all resources on application exit.
+        
+        CRITICAL: Disable Bluetooth audio input before exiting.
+        This ensures Bluetooth input is not passed through after app closes.
+        """
+        logger.info("Application closing - cleaning up resources...")
+        
+        # Stop all audio playback
         self.set_midi_enabled(False)
         self._stop_all_audio()
+        
+        # Disable Bluetooth audio input on exit - prevent passthrough after app closes
+        self._disable_bluetooth_passthrough()
+        logger.info("Bluetooth audio disabled on exit")
+        
+        # Close OSC socket
         self.osc_handler.udp_socket.close()
+        
         super().closeEvent(event)
 
 
 def main():
+    # Configure logging to show all debug messages
+    # Set level to INFO for production, DEBUG for troubleshooting
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
     app = QApplication(sys.argv)
     menu = DefaultMenu()
 
