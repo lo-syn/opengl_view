@@ -1,5 +1,9 @@
 # Bluetooth Passthrough Prevention via Shader Menu Initialization
 
+> Historical implementation notes. Current Linux routing uses a temporary
+> private capture sink and app-controlled output; see the audio section in
+> `README.md`. This document describes the earlier default-sink approach.
+
 ## Overview
 Bluetooth audio passthrough prevention now occurs when the shader menu (application UI) is initialized, rather than when the Bluetooth backend is created. This provides better control and clearer application lifecycle management.
 

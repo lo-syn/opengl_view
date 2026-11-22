@@ -85,6 +85,13 @@ available to Qt, and must support 44.1 kHz stereo 16-bit PCM for Bluetooth
 capture. Connection failures are shown in the status bar. The menu disconnects
 its Bluetooth input when leaving that mode, but does not disconnect unrelated
 Bluetooth devices at startup or shutdown.
+On Linux, Bluetooth input mode moves the configured phone's stream to a
+temporary private capture sink. The app forwards it only to the selected output
+when `enable_audio_output` is enabled; with output disabled, it is still
+analyzed for OSC but is not played. Bluetooth input mode unmutes the configured
+phone stream while capturing it. While Bluetooth input mode is off, the
+phone's direct playback stream is muted. The app restores its original route
+and mute state when it exits.
 
 The audio file path is relative to the project directory. The audio envelope
 is added to the latest MIDI value on each of `/u_x0`–`/u_x3` and sent as a
@@ -96,13 +103,15 @@ defaults to full strength until its gain control is received.
 
 ## Bluetooth audio latency
 
-Bluetooth input uses `pacat` to capture the PulseAudio source configured in
-`settings.json` under `audio.bluetooth.input.pulseaudio_input_device`. It requests a
-20 ms capture latency and 10 ms processing interval; the audio server may
-choose different values. Audio is processed as it arrives, and when the UI
-falls behind, only the newest 20 ms of queued PCM is analyzed. This favors
-responsiveness over preserving every transient. Bluetooth uses a 5 ms attack
-and 60 ms release; file playback keeps its existing envelope.
+Bluetooth input uses `pacat` to capture the monitor of the temporary private
+PipeWire/PulseAudio sink. The source configured in `settings.json` under
+`audio.bluetooth.input.pulseaudio_input_device` identifies the phone whose
+system playback stream is routed there. Capture requests 20 ms latency and a
+10 ms processing interval; the audio server may choose different values. Audio
+is processed as it arrives, and when the UI falls behind, only the newest
+20 ms of queued PCM is analyzed. This favors responsiveness over preserving
+every transient. Bluetooth uses a 5 ms attack and 60 ms release; file playback
+keeps its existing envelope.
 
 Bluetooth transport and the audio server can add latency before capture, and
 renderer updates add further delay. Measure the complete path on the target

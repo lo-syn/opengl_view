@@ -365,9 +365,6 @@ class DebianBluetoothBackend(BluetoothAudioBackend):
             if result.returncode == 0 or "already connected" in result.stdout.lower():
                 device.connected = True
                 logger.info(f"Connected to {device.name} ({device.mac_address})")
-
-                # Try to set as default audio device
-                self._set_pulseaudio_default(device)
                 return True
             else:
                 logger.warning(f"Failed to connect: {result.stderr}")

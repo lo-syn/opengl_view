@@ -1,10 +1,17 @@
 import sys
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_string
-from audio_handler import AudioHandler, AudioOutputRouter
+from audio_handler import (
+    AudioHandler,
+    AudioOutputRouter,
+    BluetoothInputRouter,
+    BLUETOOTH_CAPTURE_SINK,
+)
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -54,6 +61,8 @@ class DefaultListWidget(QListWidget):
 
 
 class DefaultMenu(QWidget):
+    bluetooth_route_checked = pyqtSignal(int, bool)
+
     def __init__(self):
         super().__init__()
 
@@ -88,6 +97,12 @@ class DefaultMenu(QWidget):
         self.bluetooth_audio_handler = None
         self.file_audio_handler = None
         self.output_router = AudioOutputRouter(self._audio_output_failed)
+        self.bluetooth_input_router = BluetoothInputRouter()
+        self._bluetooth_route_lock = threading.Lock()
+        self._bluetooth_route_executor = ThreadPoolExecutor(max_workers=1)
+        self._bluetooth_route_future = None
+        self._bluetooth_route_generation = 0
+        self.bluetooth_route_checked.connect(self._bluetooth_route_check_finished)
         self.output_device_index = -1
         self.media_devices = QMediaDevices(self)
         self.media_devices.audioOutputsChanged.connect(self._audio_outputs_changed)
@@ -160,6 +175,12 @@ class DefaultMenu(QWidget):
 
         # Show shader menu by default
         self.show_shaders()
+        self.bluetooth_input_router_timer = QTimer(self)
+        self.bluetooth_input_router_timer.timeout.connect(
+            self._poll_bluetooth_input_route
+        )
+        self.bluetooth_input_router_timer.start(250)
+        self._sync_bluetooth_input_route()
 
     def update_selected_row(self, selected_row: int):
         self.clear_message()
@@ -275,8 +296,9 @@ class DefaultMenu(QWidget):
                 self._stop_all_audio()
                 # Disconnect only the input device, leaving output devices available.
                 if previous_mode == 1:
-                    self._disable_bluetooth_passthrough()
+                    self._disconnect_bluetooth_input()
                 self.audio_mode = 0
+                self._sync_bluetooth_input_route()
                 return False
             
             # Cycle to next audio mode: 0 → 1 → 2 → 0
@@ -285,6 +307,10 @@ class DefaultMenu(QWidget):
             if self.audio_mode == 1:
                 # Switch to Bluetooth mode
                 self._stop_all_audio()
+                if not self._sync_bluetooth_input_route():
+                    self.audio_mode = 0
+                    self._sync_bluetooth_input_route()
+                    return False
                 if self.bluetooth_audio_handler is None:
                     self.bluetooth_audio_handler = AudioHandler(
                         self.osc_handler,
@@ -300,6 +326,7 @@ class DefaultMenu(QWidget):
                     self._update_message("No Bluetooth devices found")
                     # Reset to disabled mode if no devices found
                     self.audio_mode = 0
+                    self._sync_bluetooth_input_route()
                     return False
                 
                 # Try to reconnect to saved device first
@@ -321,8 +348,11 @@ class DefaultMenu(QWidget):
             elif self.audio_mode == 2:
                 # Switch to file audio and disconnect the previous Bluetooth input.
                 self._stop_all_audio()
+                if not self._sync_bluetooth_input_route():
+                    self.audio_mode = 0
+                    return False
                 if previous_mode == 1:
-                    self._disable_bluetooth_passthrough()
+                    self._disconnect_bluetooth_input()
                 if self.file_audio_handler is None:
                     self.file_audio_handler = AudioHandler(self.osc_handler)
                     self.file_audio_handler.set_output_router(self.output_router)
@@ -333,15 +363,55 @@ class DefaultMenu(QWidget):
             else:  # audio_mode == 0
                 # Disabled (disconnect the previous Bluetooth input).
                 self._stop_all_audio()
+                self._sync_bluetooth_input_route()
                 if previous_mode == 1:
-                    self._disable_bluetooth_passthrough()
+                    self._disconnect_bluetooth_input()
                 return False
         except (ImportError, FileNotFoundError) as error:
             # Only catch setup errors, not connection errors
             self._stop_all_audio()
             self.audio_mode = 0
+            self._sync_bluetooth_input_route()
             self._update_message(f"Could not enable audio: {error}")
             return False
+
+    def _sync_bluetooth_input_route(self) -> bool:
+        self._bluetooth_route_generation += 1
+        with self._bluetooth_route_lock:
+            succeeded = self.bluetooth_input_router.set_enabled(self.audio_mode == 1)
+        self._show_bluetooth_route_result(succeeded)
+        return succeeded
+
+    def _poll_bluetooth_input_route(self) -> None:
+        if self._bluetooth_route_future is not None and not self._bluetooth_route_future.done():
+            return
+        generation = self._bluetooth_route_generation
+
+        def check_route():
+            try:
+                with self._bluetooth_route_lock:
+                    succeeded = self.bluetooth_input_router.sync()
+            except Exception:
+                logger.exception("Could not synchronize Bluetooth audio route")
+                succeeded = False
+            self.bluetooth_route_checked.emit(generation, bool(succeeded))
+
+        self._bluetooth_route_future = self._bluetooth_route_executor.submit(check_route)
+
+    def _bluetooth_route_check_finished(self, generation: int, succeeded: bool) -> None:
+        if generation == self._bluetooth_route_generation:
+            self._show_bluetooth_route_result(succeeded)
+
+    def _show_bluetooth_route_result(self, succeeded: bool) -> None:
+        if not succeeded:
+            self.message_bar.setText(
+                "Could not route Bluetooth audio through the app"
+            )
+        elif (
+            self.message_bar.text()
+            == "Could not route Bluetooth audio through the app"
+        ):
+            self.message_bar.clear()
 
     def _apply_audio_output(self) -> None:
         for handler in (self.bluetooth_audio_handler, self.file_audio_handler):
@@ -359,9 +429,17 @@ class DefaultMenu(QWidget):
     def _audio_outputs_changed(self) -> None:
         device = self.output_router.device
         if device is not None and not any(
-            candidate.id() == device.id() for candidate in QMediaDevices.audioOutputs()
+            candidate.id() == device.id() for candidate in self._available_audio_outputs()
         ):
             self._audio_output_failed(device.description())
+
+    @staticmethod
+    def _available_audio_outputs():
+        return [
+            device
+            for device in QMediaDevices.audioOutputs()
+            if device.description() != BLUETOOTH_CAPTURE_SINK
+        ]
 
     def set_audio_output_enabled(self, enabled: bool) -> bool:
         if not enabled:
@@ -371,7 +449,7 @@ class DefaultMenu(QWidget):
             self.update_active_shader_status()
             return False
 
-        devices = QMediaDevices.audioOutputs()
+        devices = self._available_audio_outputs()
         if not devices:
             self._audio_output_failed("output device")
             self.output_device_index = -1
@@ -405,8 +483,8 @@ class DefaultMenu(QWidget):
             except Exception:
                 pass
 
-    def _disable_bluetooth_passthrough(self) -> None:
-        """Disconnect the Bluetooth input without disconnecting output devices."""
+    def _disconnect_bluetooth_input(self) -> None:
+        """Disconnect the app's Bluetooth input without affecting other devices."""
         handler = self.bluetooth_audio_handler
         if handler is not None and handler.use_bluetooth:
             if not handler.disconnect_bluetooth_device():
@@ -534,14 +612,19 @@ class DefaultMenu(QWidget):
         Stop audio and disconnect the Bluetooth input before exiting.
         """
         logger.info("Application closing - cleaning up resources...")
-        
+        self.bluetooth_input_router_timer.stop()
+        self._bluetooth_route_generation += 1
+        self._bluetooth_route_executor.shutdown(wait=True)
+
         # Stop all audio playback
         self.set_midi_enabled(False)
         self._stop_all_audio()
         self.output_router.disconnect()
         
         # Disconnect the input device without affecting unrelated output devices.
-        self._disable_bluetooth_passthrough()
+        self._disconnect_bluetooth_input()
+        if not self.bluetooth_input_router.restore():
+            logger.error("Could not restore Bluetooth audio route on exit")
         
         # Close OSC socket
         self.osc_handler.udp_socket.close()

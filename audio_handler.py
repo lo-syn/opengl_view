@@ -1,9 +1,11 @@
+import json
 import logging
 import math
 import os
+import re
 import subprocess
+import sys
 from pathlib import Path
-import json
 from typing import Optional, Callable
 
 import numpy as np
@@ -37,6 +39,8 @@ BLUETOOTH_INPUT_DEVICE_NAME = BLUETOOTH_CONFIG.get("input", {}).get("device_name
 BLUETOOTH_PULSEAUDIO_INPUT_DEVICE = BLUETOOTH_CONFIG.get("input", {}).get("pulseaudio_input_device", "default")
 BLUETOOTH_OUTPUT_DEVICE_NAME = BLUETOOTH_CONFIG.get("output", {}).get("device_name", "unknown")
 BLUETOOTH_PULSEAUDIO_OUTPUT_DEVICE = BLUETOOTH_CONFIG.get("output", {}).get("pulseaudio_output_device", "default")
+BLUETOOTH_CAPTURE_SINK = "opengl_viewer_bluetooth_capture"
+BLUETOOTH_CAPTURE_SOURCE = f"{BLUETOOTH_CAPTURE_SINK}.monitor"
 
 ATTACK_SECONDS = 0.01
 RELEASE_SECONDS = 0.15
@@ -104,6 +108,320 @@ class AudioOutputRouter:
         self.device = None
         if sink is not None:
             sink.stop()
+
+
+class BluetoothInputRouter:
+    """Route the configured Bluetooth stream through a private capture sink."""
+
+    def __init__(self) -> None:
+        match = re.match(
+            r"^bluez_source\.([0-9a-f]{2}(?:_[0-9a-f]{2}){5})\.",
+            BLUETOOTH_PULSEAUDIO_INPUT_DEVICE,
+            re.IGNORECASE,
+        )
+        self.address = match.group(1).replace("_", ":").upper() if match else None
+        self.enabled = False
+        self.module_id: str | None = None
+        self.capture_sink_id: int | None = None
+        self._original_routes: dict[int, tuple[str, int, bool]] = {}
+
+    def set_enabled(self, enabled: bool) -> bool:
+        self.enabled = enabled
+        return self.sync()
+
+    def sync(self) -> bool:
+        if sys.platform != "linux":
+            return True
+        if self.address is None:
+            logger.error(
+                "Cannot route Bluetooth input: configured source "
+                "does not identify a Bluetooth device"
+            )
+            return False
+
+        sink_inputs = self._list_sink_inputs()
+        if sink_inputs is None:
+            return False
+
+        targets = []
+        succeeded = True
+        for sink_input in sink_inputs:
+            properties = sink_input.get("properties", {})
+            if (
+                properties.get("api.bluez5.address", "").upper() != self.address
+                or properties.get("api.bluez5.profile") != "a2dp-source"
+            ):
+                continue
+
+            try:
+                index = int(sink_input["index"])
+                sink_id = int(sink_input["sink"])
+                current_mute = bool(sink_input["mute"])
+                serial = str(properties["object.serial"])
+            except (KeyError, TypeError, ValueError):
+                logger.error("Bluetooth playback stream is missing its route or mute state")
+                succeeded = False
+                continue
+
+            original = self._original_routes.get(index)
+            if original is None or original[0] != serial:
+                original = (serial, sink_id, current_mute)
+                self._original_routes[index] = original
+            targets.append((index, sink_id, current_mute, original))
+
+        muted_targets = []
+        for index, sink_id, current_mute, original in targets:
+            already_captured = (
+                self.enabled
+                and self.capture_sink_id is not None
+                and sink_id == self.capture_sink_id
+            )
+            if not current_mute and not already_captured:
+                current_mute = self._set_muted(index, True)
+                succeeded = current_mute and succeeded
+            muted_targets.append((index, sink_id, current_mute, original))
+
+        if self.enabled and not self._ensure_capture_sink():
+            return False
+
+        active_indexes = {index for index, _, _, _ in muted_targets}
+        capture_streams_remaining = False
+        for index, sink_id, current_mute, original in muted_targets:
+            _, original_sink_id, _ = original
+            target_sink_id = (
+                self.capture_sink_id if self.enabled else original_sink_id
+            )
+            if target_sink_id is None:
+                logger.error("Bluetooth capture sink is unavailable")
+                succeeded = False
+                continue
+
+            moving = sink_id != target_sink_id
+            if (
+                moving
+                and not self.enabled
+                and self.capture_sink_id == sink_id
+                and not current_mute
+            ):
+                capture_streams_remaining = True
+                succeeded = False
+                continue
+            if moving and self._move_to_sink(index, target_sink_id):
+                sink_id = target_sink_id
+            elif moving:
+                succeeded = False
+
+            target_mute = not self.enabled
+            if sink_id == target_sink_id and current_mute != target_mute:
+                succeeded = self._set_muted(index, target_mute) and succeeded
+            if sink_id == self.capture_sink_id:
+                capture_streams_remaining = True
+
+        self._original_routes = {
+            index: route
+            for index, route in self._original_routes.items()
+            if index in active_indexes
+        }
+
+        if not self.enabled and not capture_streams_remaining:
+            succeeded = self._unload_capture_sink() and succeeded
+        return succeeded
+
+    def restore(self) -> bool:
+        if sys.platform != "linux":
+            return True
+        if self.address is None:
+            logger.error(
+                "Cannot restore Bluetooth audio route: configured input source "
+                "does not identify a Bluetooth device"
+            )
+            return False
+
+        sink_inputs = self._list_sink_inputs()
+        if sink_inputs is None:
+            return False
+
+        succeeded = True
+        for sink_input in sink_inputs:
+            properties = sink_input.get("properties", {})
+            if (
+                properties.get("api.bluez5.address", "").upper() != self.address
+                or properties.get("api.bluez5.profile") != "a2dp-source"
+            ):
+                continue
+            try:
+                index = int(sink_input["index"])
+                sink_id = int(sink_input["sink"])
+                current_mute = bool(sink_input["mute"])
+                serial = str(properties["object.serial"])
+            except (KeyError, TypeError, ValueError):
+                logger.error("Bluetooth playback stream is missing its route or mute state")
+                succeeded = False
+                continue
+
+            original = self._original_routes.get(index)
+            if original is None or original[0] != serial:
+                original = (serial, sink_id, current_mute)
+            _, original_sink_id, original_mute = original
+            if sink_id != original_sink_id and not current_mute:
+                current_mute = self._set_muted(index, True)
+                succeeded = current_mute and succeeded
+            if sink_id != original_sink_id:
+                succeeded = self._move_to_sink(index, original_sink_id) and succeeded
+            if current_mute != original_mute:
+                succeeded = self._set_muted(index, original_mute) and succeeded
+
+        succeeded = self._unload_capture_sink() and succeeded
+        self._original_routes.clear()
+        return succeeded
+
+    @staticmethod
+    def _list_sink_inputs() -> list[dict] | None:
+        try:
+            result = subprocess.run(
+                ["pactl", "-f", "json", "list", "sink-inputs"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("Could not inspect Bluetooth playback streams")
+            return None
+        if result.returncode != 0:
+            logger.error(
+                "Could not inspect Bluetooth playback streams: %s",
+                result.stderr.strip(),
+            )
+            return None
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError:
+            logger.exception("Could not parse Bluetooth playback stream list")
+            return None
+
+    def _ensure_capture_sink(self) -> bool:
+        if self.module_id is None:
+            try:
+                result = subprocess.run(
+                    [
+                        "pactl",
+                        "load-module",
+                        "module-null-sink",
+                        f"sink_name={BLUETOOTH_CAPTURE_SINK}",
+                        f"sink_properties=device.description={BLUETOOTH_CAPTURE_SINK}",
+                        f"rate={BLUETOOTH_SAMPLE_RATE}",
+                        "channels=2",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+            except (OSError, subprocess.SubprocessError):
+                logger.exception("Could not create the private Bluetooth capture sink")
+                return False
+            if result.returncode != 0 or not result.stdout.strip().isdigit():
+                logger.error(
+                    "Could not create the private Bluetooth capture sink: %s",
+                    result.stderr.strip(),
+                )
+                return False
+            self.module_id = result.stdout.strip()
+
+        try:
+            result = subprocess.run(
+                ["pactl", "-f", "json", "list", "sinks"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("Could not inspect the private Bluetooth capture sink")
+            return False
+        if result.returncode != 0:
+            logger.error(
+                "Could not inspect the private Bluetooth capture sink: %s",
+                result.stderr.strip(),
+            )
+            return False
+        try:
+            sinks = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            logger.exception("Could not parse audio sink list")
+            return False
+        for sink in sinks:
+            if sink.get("name") == BLUETOOTH_CAPTURE_SINK:
+                try:
+                    self.capture_sink_id = int(sink["index"])
+                except (KeyError, TypeError, ValueError):
+                    logger.error("Private Bluetooth capture sink has no valid ID")
+                    return False
+                return True
+        logger.error("Private Bluetooth capture sink was not created")
+        return False
+
+    @staticmethod
+    def _move_to_sink(index: int, sink_id: int) -> bool:
+        try:
+            result = subprocess.run(
+                ["pactl", "move-sink-input", str(index), str(sink_id)],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("Could not route Bluetooth playback into the app")
+            return False
+        if result.returncode != 0:
+            logger.error(
+                "Could not route Bluetooth playback into the app: %s",
+                result.stderr.strip(),
+            )
+            return False
+        return True
+
+    def _unload_capture_sink(self) -> bool:
+        if self.module_id is None:
+            self.capture_sink_id = None
+            return True
+        try:
+            result = subprocess.run(
+                ["pactl", "unload-module", self.module_id],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("Could not remove the private Bluetooth capture sink")
+            return False
+        if result.returncode != 0:
+            logger.error(
+                "Could not remove the private Bluetooth capture sink: %s",
+                result.stderr.strip(),
+            )
+            return False
+        self.module_id = None
+        self.capture_sink_id = None
+        return True
+
+    @staticmethod
+    def _set_muted(index: int, muted: bool) -> bool:
+        try:
+            result = subprocess.run(
+                ["pactl", "set-sink-input-mute", str(index), str(muted).lower()],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("Could not change Bluetooth playback mute state")
+            return False
+        if result.returncode != 0:
+            logger.error(
+                "Could not change Bluetooth playback mute state: %s",
+                result.stderr.strip(),
+            )
+            return False
+        return True
 
 
 class AudioHandler:
@@ -302,8 +620,7 @@ class AudioHandler:
     def start_bluetooth_input_capture(self) -> bool:
         """Start capturing audio from Bluetooth input device.
         
-        Uses PulseAudio's pacat to capture Bluetooth audio stream and process it.
-        Uses the device specified in settings.json under audio.bluetooth.pulseaudio_input_device
+        Uses pacat to capture the app's private Bluetooth monitor source.
         
         Returns:
             True if Bluetooth input capture started successfully, False otherwise
@@ -313,7 +630,10 @@ class AudioHandler:
         logger.info("=" * 80)
         logger.info(f"bluetooth_mode_enabled={self.bluetooth_mode_enabled}, use_bluetooth={self.use_bluetooth}")
         logger.info(f"📱 Configured device name: {BLUETOOTH_INPUT_DEVICE_NAME}")
-        logger.info(f"🎤 PulseAudio input device: {BLUETOOTH_PULSEAUDIO_INPUT_DEVICE}")
+        logger.info(
+            "Configured Bluetooth input identifier: %s",
+            BLUETOOTH_PULSEAUDIO_INPUT_DEVICE,
+        )
         
         # CRITICAL: Only start if Bluetooth mode is explicitly enabled
         if not self.bluetooth_mode_enabled or not self.use_bluetooth:
@@ -340,7 +660,7 @@ class AudioHandler:
                 [
                     "pacat",
                     "--record",
-                    "-d", BLUETOOTH_PULSEAUDIO_INPUT_DEVICE,  # Use configured device
+                    "-d", BLUETOOTH_CAPTURE_SOURCE,
                     "--format=s16le",
                     "--rate=44100",
                     "--channels=2",
@@ -350,8 +670,7 @@ class AudioHandler:
                 stdout=subprocess.PIPE,
                 bufsize=0
             )
-            logger.info(f"✓ pacat process started (PID: {self.ffmpeg_process.pid})")
-            logger.info(f"🎧 Now recording from {BLUETOOTH_INPUT_DEVICE_NAME} via PulseAudio device: {BLUETOOTH_PULSEAUDIO_INPUT_DEVICE}")
+            logger.info("Started Bluetooth capture from the app's private audio sink")
             
             self._setup_bluetooth_audio_processing()
             

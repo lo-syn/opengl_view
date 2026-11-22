@@ -19,19 +19,21 @@ The app now correctly captures Bluetooth audio from your S23 phone and sends OSC
 1. User selects "Bluetooth" mode in the UI
 2. App creates AudioHandler with `enable_bluetooth=True`
 3. App calls `load_bluetooth_config()` → loads S23 from `bluetooth_config.json`
-4. App calls `play()` → starts pacat process capturing from S23
+4. App routes the S23 playback stream to a temporary private audio sink
+5. App calls `play()` → starts pacat on that sink's monitor
 
 ### Audio Processing
-1. `pacat --record -d bluez_source.f8_5b_6e_c1_75_d8.a2dp_source` streams Bluetooth audio
+1. `pacat` records from `opengl_viewer_bluetooth_capture.monitor`
 2. A Qt socket notifier reacts when PCM data is available
 3. `_process_bluetooth_audio_chunk()` drains the pipe, keeping up to the newest 20 ms of PCM
 4. Analyzes peak amplitude and updates the Bluetooth envelope
 5. Sends OSC message via `_set_level()` to `/u_x0`, `/u_x1`, `/u_x2`, `/u_x3`
+6. Audio is sent to an output device only when `enable_audio_output` is enabled
 
 ### App Shutdown
 1. Timer stops
 2. pacat process terminates
-3. Bluetooth is disabled
+3. The phone stream's original route and mute state are restored
 
 ## Configuration Files
 
@@ -40,8 +42,10 @@ The app now correctly captures Bluetooth audio from your S23 phone and sends OSC
 {
   "audio": {
     "bluetooth": {
-      "device_name": "Laurence's S23",
-      "pulseaudio_input_device": "bluez_source.f8_5b_6e_c1_75_d8.a2dp_source"
+      "input": {
+        "device_name": "Laurence's S23",
+        "pulseaudio_input_device": "bluez_source.f8_5b_6e_c1_75_d8.a2dp_source"
+      }
     }
   }
 }
@@ -63,11 +67,10 @@ The app now correctly captures Bluetooth audio from your S23 phone and sends OSC
 2. Launch the app
 3. Select "Bluetooth" mode
 4. Play audio on your S23 phone
-5. Check logs for:
-   - `✓ pacat process started (PID: xxxxx)`
-   - `✓✓✓ RECEIVED 4096 BYTES FROM PACAT ✓✓✓`
-   - `✓✓✓ Bluetooth audio: peak=X.XXXX, envelope=Y.YYYY → SENDING OSC ✓✓✓`
-6. Verify shader responds to audio on OSC channels /u_x0, /u_x1, /u_x2, /u_x3
+5. Enable `enable_audio_output` and select an output device to hear the audio
+6. Disable `enable_audio_output` to confirm capture and OSC analysis continue
+   without sending audio to speakers
+7. Verify the shader responds to audio on OSC channels /u_x0, /u_x1, /u_x2, /u_x3
 
 ## If Still Not Working
 
@@ -77,13 +80,14 @@ The app now correctly captures Bluetooth audio from your S23 phone and sends OSC
 
 ### Verify PulseAudio device name
 ```bash
-pactl list sources | grep -A 2 "Name: bluez"
+pactl -f json list sink-inputs
 ```
 
-Should show: `bluez_source.f8_5b_6e_c1_75_d8.a2dp_source`
+While phone audio is playing, the Bluetooth stream should show the configured
+device address and `api.bluez5.profile` set to `a2dp-source`.
 
 If different, update both:
-- `settings.json` - `audio.bluetooth.pulseaudio_input_device`
+- `settings.json` - `audio.bluetooth.input.pulseaudio_input_device`
 - Re-run the device connection script
 
 ### Verify S23 is connected

@@ -11,6 +11,7 @@ from PyQt6.QtMultimedia import QAudioFormat
 from audio_handler import (
     ATTACK_SECONDS,
     BLUETOOTH_ATTACK_SECONDS,
+    BLUETOOTH_CAPTURE_SOURCE,
     BLUETOOTH_MAX_BUFFER_BYTES,
     BLUETOOTH_RELEASE_SECONDS,
     BLUETOOTH_SAMPLE_RATE,
@@ -253,6 +254,7 @@ class BluetoothCaptureTests(unittest.TestCase):
         with patch("audio_handler.subprocess.Popen", return_value=process) as popen:
             self.assertTrue(self.handler.start_bluetooth_input_capture())
         command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("-d") + 1], BLUETOOTH_CAPTURE_SOURCE)
         self.assertIn("--latency-msec=20", command)
         self.assertIn("--process-time-msec=10", command)
 

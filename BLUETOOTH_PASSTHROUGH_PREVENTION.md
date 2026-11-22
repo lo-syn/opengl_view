@@ -1,5 +1,9 @@
 # Bluetooth Audio Passthrough Prevention
 
+> Historical implementation notes. Current Linux routing uses a temporary
+> private capture sink and app-controlled output; see the audio section in
+> `README.md`. This document describes the earlier default-sink approach.
+
 ## Problem Solved
 Previously, once a Bluetooth device was connected to the system, audio would automatically pass through it even if the application hadn't explicitly enabled Bluetooth mode. This made it impossible to prevent unwanted audio routing.
 
