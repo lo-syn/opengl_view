@@ -75,9 +75,18 @@ input index on your machine, run:
 python3 -c "import mido; print(*enumerate(mido.get_input_names()), sep='\n')"
 ```
 
-To play a hardcoded audio file, set `AUDIO_FILE_PATH` in `audio.py`, then
-enable `enable_audio` in the Settings page. The default path is relative to
-the project directory, regardless of the launch directory. The audio envelope
+Select the audio file in `settings.json` under `audio.file_path`, then cycle
+`enable_audio_input` on the Settings page to `audio_file`. Audio output is
+disabled by default; activate `enable_audio_output` to select an available
+output device. Further activations cycle through the devices and then disable
+output. The selected output plays the active audio file or Bluetooth input;
+audio analysis continues when output is disabled. A device must already be
+available to Qt, and must support 44.1 kHz stereo 16-bit PCM for Bluetooth
+capture. Connection failures are shown in the status bar. The menu disconnects
+its Bluetooth input when leaving that mode, but does not disconnect unrelated
+Bluetooth devices at startup or shutdown.
+
+The audio file path is relative to the project directory. The audio envelope
 is added to the latest MIDI value on each of `/u_x0`–`/u_x3` and sent as a
 normalized OSC float, capped at 1.0 (equivalent to MIDI 127). Stopping audio
 removes its contribution; MIDI values remain at their last received levels.
@@ -88,7 +97,7 @@ defaults to full strength until its gain control is received.
 ## Bluetooth audio latency
 
 Bluetooth input uses `pacat` to capture the PulseAudio source configured in
-`settings.json` under `audio.bluetooth.pulseaudio_input_device`. It requests a
+`settings.json` under `audio.bluetooth.input.pulseaudio_input_device`. It requests a
 20 ms capture latency and 10 ms processing interval; the audio server may
 choose different values. Audio is processed as it arrives, and when the UI
 falls behind, only the newest 20 ms of queued PCM is analyzed. This favors

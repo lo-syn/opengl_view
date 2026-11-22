@@ -4,12 +4,12 @@ import logging
 from browser import BrowserHandler
 from midi_handler import MidiHandler
 from osc_handler import OscHandler, OSC_HOST, OSC_PORT, osc_string
-from audio_handler import AudioHandler
-from bluetooth_audio import BluetoothAudioManager
+from audio_handler import AudioHandler, AudioOutputRouter
 from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtMultimedia import QMediaDevices
 from PyQt6.QtWidgets import (
     QApplication,
     QLabel,
@@ -66,9 +66,14 @@ class DefaultMenu(QWidget):
                 off_state_msg="disabled",
                 linked_function=self.set_midi_enabled,
             ),
-            "enable_audio": SettingsMenuItem(
+            "enable_audio_input": SettingsMenuItem(
                 status_labels=["disabled", "bluetooth", "audio_file"],
                 linked_function=self.set_audio_enabled,
+            ),
+            "enable_audio_output": SettingsMenuItem(
+                on_state_msg="enabled",
+                off_state_msg="disabled",
+                linked_function=self.set_audio_output_enabled,
             ),
         }
 
@@ -82,9 +87,10 @@ class DefaultMenu(QWidget):
         self.audio_mode = 0
         self.bluetooth_audio_handler = None
         self.file_audio_handler = None
-
-        # Prevent automatic Bluetooth audio passthrough on startup
-        self._prevent_bluetooth_passthrough()
+        self.output_router = AudioOutputRouter(self._audio_output_failed)
+        self.output_device_index = -1
+        self.media_devices = QMediaDevices(self)
+        self.media_devices.audioOutputsChanged.connect(self._audio_outputs_changed)
 
         self.setWindowTitle("Default menu")
         self.setWindowFlags(
@@ -223,25 +229,6 @@ class DefaultMenu(QWidget):
         shader_name = self.active_shader if self.active_shader is not None else ""
         self.status_bar.setText(f"Active Shader: {shader_name}")
 
-    def _prevent_bluetooth_passthrough(self) -> None:
-        """Prevent automatic Bluetooth audio passthrough on application startup.
-        
-        This ensures:
-        1. Bluetooth input is NOT captured at startup
-        2. Audio doesn't automatically route to Bluetooth when devices connect
-        3. Bluetooth mode can only be enabled by explicit user action
-        """
-        try:
-            manager = BluetoothAudioManager()
-            manager.disable_all_bluetooth_audio()
-            logger.info("Bluetooth audio disabled on startup - Bluetooth mode must be explicitly enabled")
-        except OSError:
-            # Bluetooth not available on this system
-            logger.debug("Bluetooth audio not available, passthrough prevention skipped")
-        except Exception as e:
-            # Log but don't fail - passthrough prevention is non-critical
-            logger.warning(f"Could not initialize Bluetooth passthrough prevention: {e}")
-
     def set_midi_enabled(self, enabled: bool) -> bool:
         if enabled:
             if self.midi_handler is not None:
@@ -277,8 +264,7 @@ class DefaultMenu(QWidget):
         When enabled=True, advance to next mode.
         When enabled=False, go to disabled mode.
         
-        When switching away from Bluetooth mode, all Bluetooth audio passthrough is disabled.
-        When switching to Bluetooth mode, Bluetooth audio passthrough is enabled.
+        When switching away from Bluetooth mode, its input device is disconnected.
         """
         try:
             # Track previous mode to disable Bluetooth if leaving Bluetooth mode
@@ -287,7 +273,7 @@ class DefaultMenu(QWidget):
             if not enabled:
                 # Disable all audio modes
                 self._stop_all_audio()
-                # If we were in Bluetooth mode, disable all Bluetooth audio passthrough
+                # Disconnect only the input device, leaving output devices available.
                 if previous_mode == 1:
                     self._disable_bluetooth_passthrough()
                 self.audio_mode = 0
@@ -304,6 +290,7 @@ class DefaultMenu(QWidget):
                         self.osc_handler,
                         enable_bluetooth=True
                     )
+                    self.bluetooth_audio_handler.set_output_router(self.output_router)
                 
                 # Scan for available devices without blocking
                 self._update_message("Scanning for Bluetooth devices...")
@@ -332,28 +319,78 @@ class DefaultMenu(QWidget):
                 return True
             
             elif self.audio_mode == 2:
-                # Switch to File audio mode (disable Bluetooth if coming from Bluetooth mode)
+                # Switch to file audio and disconnect the previous Bluetooth input.
                 self._stop_all_audio()
                 if previous_mode == 1:
                     self._disable_bluetooth_passthrough()
                 if self.file_audio_handler is None:
                     self.file_audio_handler = AudioHandler(self.osc_handler)
+                    self.file_audio_handler.set_output_router(self.output_router)
                 self.file_audio_handler.play()
+                self._update_message(f"Playing audio file: {self.file_audio_handler.active_audio_file}")
                 return True
             
             else:  # audio_mode == 0
-                # Disabled (disable Bluetooth if coming from Bluetooth mode)
+                # Disabled (disconnect the previous Bluetooth input).
                 self._stop_all_audio()
                 if previous_mode == 1:
                     self._disable_bluetooth_passthrough()
                 return False
-                
         except (ImportError, FileNotFoundError) as error:
             # Only catch setup errors, not connection errors
             self._stop_all_audio()
             self.audio_mode = 0
             self._update_message(f"Could not enable audio: {error}")
             return False
+
+    def _apply_audio_output(self) -> None:
+        for handler in (self.bluetooth_audio_handler, self.file_audio_handler):
+            if handler is not None:
+                handler.set_output_router(self.output_router)
+
+    def _audio_output_failed(self, name: str) -> None:
+        self.output_router.disconnect()
+        self._apply_audio_output()
+        self.settings["enable_audio_output"].state = False
+        if self.current_page == "settings" and "enable_audio_output" in self.status_labels:
+            self.status_labels["enable_audio_output"].setText("disabled")
+        self.status_bar.setText(f"unable to connect to {name}")
+
+    def _audio_outputs_changed(self) -> None:
+        device = self.output_router.device
+        if device is not None and not any(
+            candidate.id() == device.id() for candidate in QMediaDevices.audioOutputs()
+        ):
+            self._audio_output_failed(device.description())
+
+    def set_audio_output_enabled(self, enabled: bool) -> bool:
+        if not enabled:
+            self.output_router.disconnect()
+            self._apply_audio_output()
+            self.output_device_index = -1
+            self.update_active_shader_status()
+            return False
+
+        devices = QMediaDevices.audioOutputs()
+        if not devices:
+            self._audio_output_failed("output device")
+            self.output_device_index = -1
+            return False
+        self.output_device_index += 1
+        if self.output_device_index >= len(devices):
+            return self.set_audio_output_enabled(False)
+        device = devices[self.output_device_index]
+        try:
+            connected = self.output_router.connect(device)
+        except (OSError, RuntimeError):
+            logger.exception("Could not open output device %s", device.description())
+            connected = False
+        if not connected:
+            self._audio_output_failed(device.description())
+            return False
+        self._apply_audio_output()
+        self.update_active_shader_status()
+        return True
     
     def _stop_all_audio(self):
         """Stop all audio handlers."""
@@ -369,21 +406,11 @@ class DefaultMenu(QWidget):
                 pass
 
     def _disable_bluetooth_passthrough(self) -> None:
-        """Disable all Bluetooth audio passthrough.
-        
-        This prevents any Bluetooth device from receiving audio until explicitly re-enabled.
-        Called when switching away from Bluetooth audio mode to ensure clean state.
-        """
-        try:
-            manager = BluetoothAudioManager()
-            manager.disable_all_bluetooth_audio()
-            logger.info("All Bluetooth audio passthrough disabled")
-        except OSError:
-            # Bluetooth not available on this system - this is fine
-            logger.debug("Bluetooth audio not available, passthrough disable skipped")
-        except Exception as e:
-            # Log but don't fail - disabling passthrough is non-critical
-            logger.warning(f"Could not disable Bluetooth passthrough: {e}")
+        """Disconnect the Bluetooth input without disconnecting output devices."""
+        handler = self.bluetooth_audio_handler
+        if handler is not None and handler.use_bluetooth:
+            if not handler.disconnect_bluetooth_device():
+                logger.warning("Could not disconnect Bluetooth input device")
 
     def _update_message(self, text: str) -> None:
         """Update message bar text and immediately refresh the GUI """
@@ -398,9 +425,10 @@ class DefaultMenu(QWidget):
         row_layout.addStretch()
         
         # Special handling for audio mode display
-        if name == "enable_audio":
-            audio_mode_names = ["disabled", "bluetooth", "audio_file"]
-            status = QLabel(audio_mode_names[self.audio_mode])
+        if name == "enable_audio_input":
+            status = QLabel(self.settings[name].status_labels[self.audio_mode])
+        elif name == "enable_audio_output" and self.output_router.device is not None:
+            status = QLabel(self.output_router.device.description())
         elif menu_item.state:
             status = QLabel(menu_item.on_state_msg)
         else:
@@ -419,7 +447,7 @@ class DefaultMenu(QWidget):
         current_state = current_setting.state
         
         # Special handling for audio mode cycling - always advance mode
-        if name == "enable_audio":
+        if name == "enable_audio_input":
             # For audio, we always pass True to cycle through modes
             # We never toggle off/on, we just cycle through 3 modes
             state = current_setting.linked_function(True)
@@ -431,6 +459,13 @@ class DefaultMenu(QWidget):
             # Update label with current mode name
             mode_name = self.settings[name].status_labels[self.audio_mode]
             self.status_labels[name].setText(mode_name)
+        elif name == "enable_audio_output":
+            state = current_setting.linked_function(True)
+            current_setting.state = state
+            device = self.output_router.device
+            self.status_labels[name].setText(
+                device.description() if device is not None else current_setting.off_state_msg
+            )
         else:
             # Normal toggle for other settings
             state = current_setting.linked_function(not current_state)
@@ -496,18 +531,17 @@ class DefaultMenu(QWidget):
     def closeEvent(self, event):
         """Clean up all resources on application exit.
         
-        CRITICAL: Disable Bluetooth audio input before exiting.
-        This ensures Bluetooth input is not passed through after app closes.
+        Stop audio and disconnect the Bluetooth input before exiting.
         """
         logger.info("Application closing - cleaning up resources...")
         
         # Stop all audio playback
         self.set_midi_enabled(False)
         self._stop_all_audio()
+        self.output_router.disconnect()
         
-        # Disable Bluetooth audio input on exit - prevent passthrough after app closes
+        # Disconnect the input device without affecting unrelated output devices.
         self._disable_bluetooth_passthrough()
-        logger.info("Bluetooth audio disabled on exit")
         
         # Close OSC socket
         self.osc_handler.udp_socket.close()

@@ -14,6 +14,9 @@ from PyQt6.QtMultimedia import (
     QAudioFormat,
     QAudioOutput,
     QAudioInput,
+    QAudio,
+    QAudioDevice,
+    QAudioSink,
     QMediaPlayer,
     QMediaCaptureSession,
 )
@@ -30,8 +33,10 @@ AUDIO_OSC_ADDRESSES = settings["audio"]["osc_addresses"]
 
 # Load Bluetooth device configuration
 BLUETOOTH_CONFIG = settings.get("audio", {}).get("bluetooth", {})
-BLUETOOTH_DEVICE_NAME = BLUETOOTH_CONFIG.get("device_name", "unknown")
-BLUETOOTH_PULSEAUDIO_DEVICE = BLUETOOTH_CONFIG.get("pulseaudio_input_device", "default")
+BLUETOOTH_INPUT_DEVICE_NAME = BLUETOOTH_CONFIG.get("input", {}).get("device_name", "unknown")
+BLUETOOTH_PULSEAUDIO_INPUT_DEVICE = BLUETOOTH_CONFIG.get("input", {}).get("pulseaudio_input_device", "default")
+BLUETOOTH_OUTPUT_DEVICE_NAME = BLUETOOTH_CONFIG.get("output", {}).get("device_name", "unknown")
+BLUETOOTH_PULSEAUDIO_OUTPUT_DEVICE = BLUETOOTH_CONFIG.get("output", {}).get("pulseaudio_output_device", "default")
 
 ATTACK_SECONDS = 0.01
 RELEASE_SECONDS = 0.15
@@ -42,6 +47,63 @@ BLUETOOTH_FRAME_BYTES = 4  # Stereo signed 16-bit PCM
 BLUETOOTH_MAX_BUFFER_BYTES = BLUETOOTH_SAMPLE_RATE * BLUETOOTH_FRAME_BYTES // 50
 
 logger = logging.getLogger(__name__)
+
+
+class AudioOutputRouter:
+    """Route captured PCM to one explicitly selected output device."""
+
+    def __init__(self, on_error: Callable[[str], None]):
+        self.on_error = on_error
+        self.device: Optional[QAudioDevice] = None
+        self.sink: Optional[QAudioSink] = None
+        self.stream = None
+
+    def connect(self, device: QAudioDevice) -> bool:
+        self.disconnect()
+        audio_format = QAudioFormat()
+        audio_format.setSampleRate(BLUETOOTH_SAMPLE_RATE)
+        audio_format.setChannelCount(2)
+        audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        if not device.isFormatSupported(audio_format):
+            logger.warning("Output device %s does not support capture format", device.description())
+            return False
+        sink = QAudioSink(device, audio_format)
+        stream = sink.start()
+        if stream is None or sink.error() != QAudio.Error.NoError:
+            logger.error("Unable to start output device %s: %s", device.description(), sink.error())
+            sink.stop()
+            return False
+        self.device = device
+        self.sink = sink
+        self.stream = stream
+        sink.stateChanged.connect(self._state_changed)
+        return True
+
+    def _state_changed(self, state: QAudio.State) -> None:
+        if (self.sink is not None and self.device is not None
+                and state == QAudio.State.StoppedState
+                and self.sink.error() not in (QAudio.Error.NoError, QAudio.Error.UnderrunError)):
+            name = self.device.description()
+            logger.error("Output device %s stopped: %s", name, self.sink.error())
+            self.on_error(name)
+
+    def write(self, data: bytes) -> None:
+        if self.sink is None or self.stream is None:
+            return
+        size = min(len(data), max(0, self.sink.bytesFree()))
+        size -= size % BLUETOOTH_FRAME_BYTES
+        if size and self.stream.write(data[:size]) < 0:
+            if self.device is not None:
+                logger.error("Unable to write to output device %s", self.device.description())
+                self.on_error(self.device.description())
+
+    def disconnect(self) -> None:
+        sink = self.sink
+        self.sink = None
+        self.stream = None
+        self.device = None
+        if sink is not None:
+            sink.stop()
 
 
 class AudioHandler:
@@ -64,10 +126,14 @@ class AudioHandler:
         self._last_sent_level: float | None = None
         self._level_change_threshold = 0.001  # Send OSC only if change > 0.1%
 
+        # Placeholder for storing active audio file names
+        self.active_audio_file = None
+
         # Lazy initialization - create audio objects only when needed
         self.audio_output: Optional[QAudioOutput] = None
         self.player: Optional[QMediaPlayer] = None
         self.buffer_output: Optional[QAudioBufferOutput] = None
+        self.output_router: Optional[AudioOutputRouter] = None
 
         # Bluetooth INPUT capture (for receiving audio from phone)
         self.capture_session: Optional[QMediaCaptureSession] = None
@@ -109,6 +175,8 @@ class AudioHandler:
             logger.info("Initializing audio output...")
             # Configure audio output, media player and activate audio buffer output
             self.audio_output = QAudioOutput()
+            if self.output_router is not None:
+                self._apply_output_device()
             self.player = QMediaPlayer()
             self.player.setAudioOutput(self.audio_output)
 
@@ -123,6 +191,18 @@ class AudioHandler:
         except Exception as e:
             logger.error(f"Failed to initialize audio output: {e}")
             return False
+
+    def set_output_router(self, router: AudioOutputRouter) -> None:
+        self.output_router = router
+        self._apply_output_device()
+
+    def _apply_output_device(self) -> None:
+        if self.audio_output is None or self.output_router is None:
+            return
+        device = self.output_router.device
+        if device is not None:
+            self.audio_output.setDevice(device)
+        self.audio_output.setMuted(device is None)
 
     def _configure_audio_output_device(self, use_bluetooth: bool = False) -> bool:
         """Configure QAudioOutput to use a specific device.
@@ -194,6 +274,7 @@ class AudioHandler:
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
         
         logger.info(f"Starting audio file playback: {audio_path}")
+        self.active_audio_file = audio_path.stem
         self.player.setSource(QUrl.fromLocalFile(str(audio_path.resolve())))
         self.player.play()
 
@@ -231,8 +312,8 @@ class AudioHandler:
         logger.info("START BLUETOOTH INPUT CAPTURE CALLED")
         logger.info("=" * 80)
         logger.info(f"bluetooth_mode_enabled={self.bluetooth_mode_enabled}, use_bluetooth={self.use_bluetooth}")
-        logger.info(f"📱 Configured device name: {BLUETOOTH_DEVICE_NAME}")
-        logger.info(f"🎤 PulseAudio input device: {BLUETOOTH_PULSEAUDIO_DEVICE}")
+        logger.info(f"📱 Configured device name: {BLUETOOTH_INPUT_DEVICE_NAME}")
+        logger.info(f"🎤 PulseAudio input device: {BLUETOOTH_PULSEAUDIO_INPUT_DEVICE}")
         
         # CRITICAL: Only start if Bluetooth mode is explicitly enabled
         if not self.bluetooth_mode_enabled or not self.use_bluetooth:
@@ -253,13 +334,13 @@ class AudioHandler:
             logger.info(f"✓ Connected to Bluetooth device: {self.bluetooth_manager.current_device.name}")
             
             # Start PulseAudio recording from configured Bluetooth input device
-            logger.info(f"Starting pacat process to record from Bluetooth device: {BLUETOOTH_DEVICE_NAME}")
+            logger.info(f"Starting pacat process to record from Bluetooth device: {BLUETOOTH_INPUT_DEVICE_NAME}")
             
             self.ffmpeg_process = subprocess.Popen(
                 [
                     "pacat",
                     "--record",
-                    "-d", BLUETOOTH_PULSEAUDIO_DEVICE,  # Use configured device
+                    "-d", BLUETOOTH_PULSEAUDIO_INPUT_DEVICE,  # Use configured device
                     "--format=s16le",
                     "--rate=44100",
                     "--channels=2",
@@ -270,7 +351,7 @@ class AudioHandler:
                 bufsize=0
             )
             logger.info(f"✓ pacat process started (PID: {self.ffmpeg_process.pid})")
-            logger.info(f"🎧 Now recording from {BLUETOOTH_DEVICE_NAME} via PulseAudio device: {BLUETOOTH_PULSEAUDIO_DEVICE}")
+            logger.info(f"🎧 Now recording from {BLUETOOTH_INPUT_DEVICE_NAME} via PulseAudio device: {BLUETOOTH_PULSEAUDIO_INPUT_DEVICE}")
             
             self._setup_bluetooth_audio_processing()
             
@@ -341,6 +422,8 @@ class AudioHandler:
         self._bluetooth_pending = bytes(pending[complete_bytes:])
         if complete_bytes:
             data = bytes(pending[:complete_bytes])
+            if self.output_router is not None:
+                self.output_router.write(data)
             peak = self._peak_amplitude(data, QAudioFormat.SampleFormat.Int16)
             duration = complete_bytes / (BLUETOOTH_FRAME_BYTES * BLUETOOTH_SAMPLE_RATE)
             time_constant = (
