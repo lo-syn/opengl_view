@@ -631,6 +631,7 @@ class DefaultMenu(QWidget):
             self.status_labels[shader_name] = QLabel()
         self._populate_menu(selected_pack.shaders, offset=True)
         selected_pack.state = True
+        self.send_shader_pack(name)
 
 
     def _run_shader_option(self, name: str):
@@ -683,6 +684,10 @@ class DefaultMenu(QWidget):
 
     def send_shader(self, name):
         packet = osc_string("/shader") + osc_string(",s") + osc_string(name)
+        self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
+
+    def send_shader_pack(self, name):
+        packet = osc_string("/shader_pack") + osc_string(",s") + osc_string(name)
         self.osc_handler.udp_socket.sendto(packet, (OSC_HOST, OSC_PORT))
 
     def keyPressEvent(self, event: QKeyEvent):

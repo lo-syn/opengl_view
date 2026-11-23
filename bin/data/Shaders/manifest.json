@@ -9,6 +9,16 @@
                 "vertex": "default.vert",
                 "fragment": "gradient.frag"
             }
+        },
+        "ShaderPack2": {
+            "Blob": {
+                "vertex": "default.vert",
+                "fragment": "blob.frag"
+            },
+            "Gradient": {
+                "vertex": "default.vert",
+                "fragment": "gradient.frag"
+            }
         }
     }
 }

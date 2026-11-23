@@ -68,7 +68,7 @@ bool ofApp::LoadShaderPack(const std::string & packFolderName) {
 	}
 
 	const fs::path dataRoot = ofToDataPath("", true);
-	fs::path packRoot = dataRoot / packFolderName;
+	fs::path packRoot = dataRoot / "Shaders";
 	fs::path manifestPath = packRoot / "manifest.json";
 	bool rootManifest = false;
 
@@ -92,16 +92,17 @@ bool ofApp::LoadShaderPack(const std::string & packFolderName) {
 	}
 	try {
 		nlohmann::json manifest = nlohmann::json::parse(file);
-		if (!manifest.is_object() || !manifest.contains("programs") || !manifest["programs"].is_object()) {
-			ofLogError("ofApp::LoadShaderPack") << "Invalid programs object in " << manifestPath;
+		if (!manifest.is_object() || !manifest.contains("pack_names") || !manifest["pack_names"].is_object()) {
+			ofLogError("ofApp::LoadShaderPack") << "Invalid pack_names object in " << manifestPath;
 			return false;
 		}
-		if (rootManifest && (!manifest.contains("pack_name") || !manifest["pack_name"].is_string() || manifest["pack_name"].get<std::string>() != packFolderName)) {
+		const auto pack = manifest["pack_names"].find(packFolderName);
+		if (pack == manifest["pack_names"].end() || !pack->is_object()) {
 			ofLogError("ofApp::LoadShaderPack") << "Manifest not found for shader bank: " << packFolderName;
 			return false;
 		}
-		shaderPrograms = std::move(manifest["programs"]);
-		shaderPackRoot = packRoot.string();
+		shaderPrograms = std::move(*pack);
+		shaderPackRoot = rootManifest ? packRoot.string() : (packRoot / packFolderName).string();
 		ofLogNotice("ofApp::LoadShaderPack") << "Loaded shader bank: " << packFolderName;
 		return true;
 	} catch (const nlohmann::json::exception & error) {
@@ -173,9 +174,9 @@ void ofApp::update() {
 			continue;
 		}
 		const auto address = message.getAddress();
-		if (address == "/shader_bank") {
+		if (address == "/shader_pack") {
 			if (message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING) {
-				ofLogWarning("ofApp::update") << "Expected one string argument for /shader_bank";
+				ofLogWarning("ofApp::update") << "Expected one string argument for /shader_pack";
 				continue;
 			}
 			LoadShaderPack(message.getArgAsString(0));
