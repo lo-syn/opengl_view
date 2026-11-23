@@ -1,0 +1,9 @@
+{
+    "pack_name": "ShaderPack1",
+    "programs": {
+        "Blob": {
+            "vertex": "ShaderPack1/default.vert",
+            "fragment": "ShaderPack1/blob.frag"
+        }
+    }
+}
