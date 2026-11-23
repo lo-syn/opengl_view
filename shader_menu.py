@@ -90,7 +90,8 @@ class DefaultMenu(QWidget):
 
         # Populate shaders with all available shader from shader pack
         shader_pack_data = self.manifest_data["pack_names"]
-        self.shader_packs = {}        
+        self.shader_packs = {}    
+        self.shaders = {}
         for pack_name, pack_data in shader_pack_data.items():
             self.shader_packs[pack_name] = ShaderPackItem()
             current_pack_shaders = {}
@@ -101,7 +102,9 @@ class DefaultMenu(QWidget):
                     vert_shader_path=pack_data[name].get("vertex"),
                 )
                 current_pack_shaders[name] = current
+                self.shaders[name] = current
             self.shader_packs[pack_name].shaders = current_pack_shaders
+            
 
         self.settings = {
             "enable_midi": SettingsMenuItem(
@@ -224,14 +227,26 @@ class DefaultMenu(QWidget):
                 background = "#555" if row_index == selected_row else "transparent"
                 row.setStyleSheet(f"background-color: {background};")
 
-    def _populate_menu(self, menu_items: dict[str, DefaultMenuItem], offset: bool = False):
-        # Populates selected list widget with menu items
+    def _populate_menu(
+        self,
+        menu_items: dict[str, DefaultMenuItem],
+        offset: bool = False,
+        after_item: QListWidgetItem | None = None,
+    ):
+        insertion_row = self.list_widget.count()
+        if after_item is not None:
+            insertion_row = self.list_widget.row(after_item)
+            if insertion_row < 0:
+                raise ValueError("Menu item does not belong to this list")
+            insertion_row += 1
+
         for name, menu_item in menu_items.items():
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, name)
             item.setData(Qt.ItemDataRole.UserRole + 1, offset)
             row = self._create_row(name, menu_item, offset)
-            self.list_widget.addItem(item)
+            self.list_widget.insertItem(insertion_row, item)
+            insertion_row += 1
             item.setSizeHint(row.sizeHint())
             self.list_widget.setItemWidget(item, row)
 
@@ -610,7 +625,7 @@ class DefaultMenu(QWidget):
             else:
                 self.status_labels[name].setText(current_setting.off_state_msg)
 
-    def _run_shader_pack_option(self, name: str):
+    def _run_shader_pack_option(self, name: str, item: QListWidgetItem):
         if name not in self.shader_packs.keys():
             self._update_message("Attempting to run missing shader pack")
             return
@@ -629,7 +644,7 @@ class DefaultMenu(QWidget):
         self.active_shader_pack = selected_pack
         for shader_name in selected_pack.shaders.keys():
             self.status_labels[shader_name] = QLabel()
-        self._populate_menu(selected_pack.shaders, offset=True)
+        self._populate_menu(selected_pack.shaders, offset=True, after_item=item)
         selected_pack.state = True
         self.send_shader_pack(name)
 
@@ -649,9 +664,10 @@ class DefaultMenu(QWidget):
             return
         # Set off message for previous shader
         if self.active_shader is not None:
-            previous_shader = self.active_shader_pack.shaders[self.active_shader]
+            previous_shader = self.shaders[self.active_shader]
             previous_shader.state = False
-            self.status_labels[self.active_shader].setText(previous_shader.off_state_msg)
+            if self.active_shader_pack and self.active_shader in self.active_shader_pack.shaders:
+                self.status_labels[self.active_shader].setText(previous_shader.off_state_msg)
 
         # Set active shader
         self.active_shader = name
@@ -671,7 +687,7 @@ class DefaultMenu(QWidget):
             # Else sends shader with shader name
             if name in self.shader_packs:
                 self.active_shader_pack = self.shader_packs[name]
-                self._run_shader_pack_option(name)
+                self._run_shader_pack_option(name, item)
             else:
                 self._run_shader_option(name)
             return

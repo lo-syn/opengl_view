@@ -94,6 +94,8 @@ python3 shader_menu.py
 The menu opens as a small always-on-top panel near the bottom-center of the
 primary display. The renderer uses a
 borderless window so this menu can stay visible above it. Press `Esc` to close it.
+Activate a shader pack to show its shaders directly beneath it; activate it
+again to collapse the list.
 Use the up/down arrow keys to navigate the shader names, then press `Enter` or
 `Space` to activate one; clicking a name also works. The active choice is
 marked `on` at the right. Activating the active shader again resets the

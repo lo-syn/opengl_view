@@ -11,13 +11,13 @@
             }
         },
         "ShaderPack2": {
-            "Blob": {
+            "Blob2": {
                 "vertex": "default.vert",
-                "fragment": "blob.frag"
+                "fragment": "blob2.frag"
             },
-            "Gradient": {
+            "Gradient2": {
                 "vertex": "default.vert",
-                "fragment": "gradient.frag"
+                "fragment": "gradient2.frag"
             }
         }
     }
