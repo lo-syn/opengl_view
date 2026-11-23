@@ -91,7 +91,6 @@ class DefaultMenu(QWidget):
         # Populate shaders with all available shader from shader pack
         shader_pack_data = self.manifest_data["pack_names"]
         self.shader_packs = {}    
-        self.shaders = {}
         for pack_name, pack_data in shader_pack_data.items():
             self.shader_packs[pack_name] = ShaderPackItem()
             current_pack_shaders = {}
@@ -102,7 +101,6 @@ class DefaultMenu(QWidget):
                     vert_shader_path=pack_data[name].get("vertex"),
                 )
                 current_pack_shaders[name] = current
-                self.shaders[name] = current
             self.shader_packs[pack_name].shaders = current_pack_shaders
             
 
@@ -128,6 +126,7 @@ class DefaultMenu(QWidget):
         self.osc_handler = OscHandler()
         self.audio_handler = None
         self.active_shader = None
+        self.active_shader_owner = None
 
         # Audio mode state: 0=disabled, 1=bluetooth, 2=audio_file
         self.audio_mode = 0
@@ -185,6 +184,7 @@ class DefaultMenu(QWidget):
 
         # Connect actions to functions
         self.status_labels: dict[str, QLabel] = {}
+        self.shader_status_labels: dict[tuple[str, str], QLabel] = {}
         self.list_widget.activateCurrentItem.connect(self.activate_item)
         self.list_widget.currentRowChanged.connect(self.update_selected_row)
 
@@ -232,6 +232,7 @@ class DefaultMenu(QWidget):
         menu_items: dict[str, DefaultMenuItem],
         offset: bool = False,
         after_item: QListWidgetItem | None = None,
+        pack_name: str | None = None,
     ):
         insertion_row = self.list_widget.count()
         if after_item is not None:
@@ -244,20 +245,21 @@ class DefaultMenu(QWidget):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, name)
             item.setData(Qt.ItemDataRole.UserRole + 1, offset)
-            row = self._create_row(name, menu_item, offset)
+            item.setData(Qt.ItemDataRole.UserRole + 2, pack_name)
+            row = self._create_row(name, menu_item, offset, pack_name)
             self.list_widget.insertItem(insertion_row, item)
             insertion_row += 1
             item.setSizeHint(row.sizeHint())
             self.list_widget.setItemWidget(item, row)
 
-    def _collapse_menu(self, menu_items: dict[str, DefaultMenuItem], offset: bool = False):
+    def _collapse_menu(self, pack_name: str):
         for row_index in reversed(range(self.list_widget.count())):
             item = self.list_widget.item(row_index)
-            name = item.data(Qt.ItemDataRole.UserRole)
-            item_offset = item.data(Qt.ItemDataRole.UserRole + 1)
-            if name not in menu_items or item_offset != offset:
+            if item.data(Qt.ItemDataRole.UserRole + 2) != pack_name:
                 continue
 
+            name = item.data(Qt.ItemDataRole.UserRole)
+            self.shader_status_labels.pop((pack_name, name), None)
             row = self.list_widget.itemWidget(item)
             self.list_widget.removeItemWidget(item)
             self.list_widget.takeItem(row_index)
@@ -270,6 +272,7 @@ class DefaultMenu(QWidget):
         self.current_page = "shaders"
         self.title.setText("SHADER")
         self.list_widget.clear()
+        self.shader_status_labels.clear()
         for pack in self.shader_packs.values():
             pack.state = False
         self.active_shader_pack = None
@@ -562,7 +565,10 @@ class DefaultMenu(QWidget):
         self.message_bar.setText(text)
         QApplication.processEvents()
 
-    def _create_row(self, name: str, menu_item: DefaultMenuItem, offset: bool = False):
+    def _create_row(
+        self, name: str, menu_item: DefaultMenuItem, offset: bool = False,
+        pack_name: str | None = None,
+    ):
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(40 if offset else 0, 0, 0, 0)
@@ -571,11 +577,15 @@ class DefaultMenu(QWidget):
 
         
         # Special handling for audio mode display
-        if name == "enable_audio_input":
+        if pack_name is None and name == "enable_audio_input":
             status = QLabel(self.settings[name].status_labels[self.audio_mode])
-        elif name == "enable_audio_output" and self.output_router.device is not None:
+        elif (
+            pack_name is None
+            and name == "enable_audio_output"
+            and self.output_router.device is not None
+        ):
             status = QLabel(self.output_router.device.description())
-        elif name in self.shader_packs:
+        elif pack_name is None and name in self.shader_packs:
             status = QLabel()
 
         elif menu_item.state:
@@ -584,7 +594,10 @@ class DefaultMenu(QWidget):
             status = QLabel(menu_item.off_state_msg)
         
         status.setObjectName("activeStatus")
-        self.status_labels[name] = status
+        if pack_name is None:
+            self.status_labels[name] = status
+        else:
+            self.shader_status_labels[(pack_name, name)] = status
         row_layout.addWidget(status)
         return row
 
@@ -632,48 +645,53 @@ class DefaultMenu(QWidget):
 
         selected_pack = self.shader_packs[name]
         if selected_pack.state:
-            self._collapse_menu(selected_pack.shaders, offset=True)
+            self._collapse_menu(name)
             selected_pack.state = False
             return
 
-        for pack in self.shader_packs.values():
-            if pack.state:
-                self._collapse_menu(pack.shaders, offset=True)
-                pack.state = False
-
         self.active_shader_pack = selected_pack
-        for shader_name in selected_pack.shaders.keys():
-            self.status_labels[shader_name] = QLabel()
-        self._populate_menu(selected_pack.shaders, offset=True, after_item=item)
+        self._populate_menu(
+            selected_pack.shaders, offset=True, after_item=item, pack_name=name
+        )
         selected_pack.state = True
         self.send_shader_pack(name)
 
 
-    def _run_shader_option(self, name: str):
-        if name not in self.active_shader_pack.shaders.keys():
+    def _run_shader_option(self, name: str, pack_name: str):
+        pack = self.shader_packs[pack_name]
+        if name not in pack.shaders:
             self._update_message("Attempting to run missing shader")
             return
-        current_shader: ShaderItem = self.active_shader_pack.shaders[name]
+        if self.active_shader_pack is not pack:
+            self.active_shader_pack = pack
+            self.send_shader_pack(pack_name)
+        current_shader: ShaderItem = pack.shaders[name]
+        status = self.shader_status_labels[(pack_name, name)]
         # Reset if already active
-        if self.active_shader == name:
+        if self.active_shader == name and self.active_shader_owner == pack_name:
             current_shader.state = False
-            self.status_labels[name].setText(current_shader.off_state_msg)
+            status.setText(current_shader.off_state_msg)
             self.active_shader = None
+            self.active_shader_owner = None
             self.update_active_shader_status()
             self.send_shader("reset")
             return
         # Set off message for previous shader
         if self.active_shader is not None:
-            previous_shader = self.shaders[self.active_shader]
+            previous_shader = self.shader_packs[self.active_shader_owner].shaders[self.active_shader]
             previous_shader.state = False
-            if self.active_shader_pack and self.active_shader in self.active_shader_pack.shaders:
-                self.status_labels[self.active_shader].setText(previous_shader.off_state_msg)
+            previous_status = self.shader_status_labels.get(
+                (self.active_shader_owner, self.active_shader)
+            )
+            if previous_status is not None:
+                previous_status.setText(previous_shader.off_state_msg)
 
         # Set active shader
         self.active_shader = name
+        self.active_shader_owner = pack_name
         self.update_active_shader_status()
         current_shader.state = True
-        self.status_labels[name].setText(current_shader.on_state_msg)
+        status.setText(current_shader.on_state_msg)
         self.send_shader(name)
 
     def activate_item(self, item):
@@ -683,13 +701,11 @@ class DefaultMenu(QWidget):
             self._run_settings_option(name)
             return
         if self.current_page == "shaders":
-            # Opens shader pack if the name corresponds to a shader pack
-            # Else sends shader with shader name
-            if name in self.shader_packs:
-                self.active_shader_pack = self.shader_packs[name]
+            pack_name = item.data(Qt.ItemDataRole.UserRole + 2)
+            if pack_name is None:
                 self._run_shader_pack_option(name, item)
             else:
-                self._run_shader_option(name)
+                self._run_shader_option(name, pack_name)
             return
         if self.current_page == "browser":
             try:
