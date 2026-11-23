@@ -476,7 +476,7 @@ class DefaultMenu(QWidget):
         self.settings["enable_audio_output"].state = False
         if self.current_page == "settings" and "enable_audio_output" in self.status_labels:
             self.status_labels["enable_audio_output"].setText("disabled")
-        self.status_bar.setText(f"unable to connect to {name}")
+        self.message_bar.setText(f"Unable to connect to {name}")
 
     def _audio_outputs_changed(self) -> None:
         device = self.output_router.device
