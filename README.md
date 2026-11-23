@@ -33,10 +33,44 @@ machine-specific absolute paths.
 
 Keep the shader files in `bin/data`; they are runtime assets, not build output.
 
+## Shader banks over OSC
+
+The renderer listens on OSC port `8001`. Send `/shader_bank` with one string
+containing a bank folder name, for example `MyBank`. The renderer reads
+`bin/data/MyBank/manifest.json`; shader paths in that manifest are relative
+to the bank folder:
+
+```json
+{
+  "programs": {
+    "waves": {
+      "vertex": "default.vert",
+      "fragment": "waves.frag",
+      "defines": ["EXAMPLE 1"]
+    }
+  }
+}
+```
+
+`defines` is optional. Send `/shader` with the string `waves` to compile and
+select that program. Program names are case-sensitive. Send `/shader` with
+`reset` to clear the display. The selected shader remains visible when changing
+banks, or if a bank or shader fails to load; errors are logged by the renderer.
+Re-select a program to load changed shader files, or re-send `/shader_bank`
+to reload a changed manifest.
+
+The default bank is `ShaderPack1`. For compatibility with the existing assets,
+`bin/data/manifest.json` can also define a bank if its `pack_name` matches the
+requested bank name; its shader paths are relative to `bin/data`. The legacy
+`blob` alias selects `Blob` when there is no `blob` entry, and `shader` loads
+the built-in shader if the bank has no `shader` entry.
+
 ## Shader menu overlay
 
 The openFrameworks app listens for shader selections over OSC on port `8001`.
-It starts with `blob.frag`; run the Python menu to select between that shader
+It starts with a black screen. Send `/shader` with the string `Blob` to select
+the `Blob` program from the shader-pack manifest; `blob` is also accepted for
+compatibility with the Python menu. Run the menu to select between that program
 and `shader.frag`:
 
 ```sh

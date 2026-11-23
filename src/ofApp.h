@@ -2,6 +2,7 @@
 
 #include "ofMain.h"
 #include "ofxOsc.h"
+#include <nlohmann/json.hpp>
 
 class ofApp : public ofBaseApp{
 	public:
@@ -31,6 +32,9 @@ class ofApp : public ofBaseApp{
 
 	private:
 		bool loadShader(const std::string& name);
+		bool LoadShaderPack(const std::string& packFolderName);
 		std::string shaderDirectory;
 		std::string currentShaderName = "blob";
+		std::string shaderPackRoot;
+		nlohmann::json shaderPrograms = nlohmann::json::object();
 };

@@ -1,0 +1,14 @@
+{
+    "pack_names": {
+        "ShaderPack1": {
+            "Blob": {
+                "vertex": "default.vert",
+                "fragment": "blob.frag"
+            },
+            "Gradient": {
+                "vertex": "default.vert",
+                "fragment": "gradient.frag"
+            }
+        }
+    }
+}

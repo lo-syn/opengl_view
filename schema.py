@@ -9,10 +9,17 @@ class DefaultMenuItem:
     state: bool | None = False
     on_state_msg: str | None = ""
     off_state_msg: str | None = ""
+    searchable: bool = False
 
 @dataclass
-class ShaderMenuItem(DefaultMenuItem):
-    placeholder: str | None = None
+class ShaderItem(DefaultMenuItem):
+    frag_shader_path: str | None = None
+    vert_shader_path: str | None = None
+
+@dataclass
+class ShaderPackItem(DefaultMenuItem):
+    shaders: dict[str, ShaderItem] = field(default_factory=dict)
+    searchable: bool = True
 
 @dataclass
 class SettingsMenuItem(DefaultMenuItem):

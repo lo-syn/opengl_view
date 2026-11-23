@@ -3,27 +3,17 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <utility>
 
 namespace {
 constexpr int oscPort = 8001;
-void LoadShaderPack(const std::string & packFolderName);
 }
 namespace fs = std::filesystem;
 
 //--------------------------------------------------------------
 void ofApp::setup() {
-
-	LoadShaderPack("ShaderPack1");
-
-	shaderDirectory = ofIsGLProgrammableRenderer()
-		? "shadersGL3"
-		: "shadersGL2";
-
 	if (!oscReceiver.setup(oscPort)) {
 		ofLogError("ofApp::setup") << "Failed to listen for OSC on port " << oscPort;
 	}
@@ -38,12 +28,24 @@ std::string LoadShaderWithDefines(const fs::path & filepath, const std::vector<s
 
 	std::stringstream buffer;
 	buffer << file.rdbuf();
+	if (file.bad()) {
+		throw std::runtime_error("Failed to read shader: " + filepath.string());
+	}
 	std::string source = buffer.str();
 
 	// Inject #define macros right after the #version line
 	if (!defines.empty()) {
 		size_t versionPos = source.find("#version");
-		size_t lineEnd = (versionPos != std::string::npos) ? source.find('\n', versionPos) + 1 : 0;
+		size_t lineEnd = 0;
+		if (versionPos != std::string::npos) {
+			lineEnd = source.find('\n', versionPos);
+			if (lineEnd == std::string::npos) {
+				source += '\n';
+				lineEnd = source.size();
+			} else {
+				++lineEnd;
+			}
+		}
 
 		std::string defineBlock;
 		for (const auto & def : defines) {
@@ -55,66 +57,111 @@ std::string LoadShaderWithDefines(const fs::path & filepath, const std::vector<s
 	return source;
 }
 
-// Loads a shader pack from the specified folder name, reading its manifest and preparing shader programs.
+// Loads a shader pack manifest; programs are compiled when selected.
 //--------------------------------------------------------------
-namespace {
-void LoadShaderPack(const std::string & packFolderName) {
-	// Resolves to "<current_working_directory>/bin/data/<packFolderName>"
-	fs::path packRoot = fs::current_path() / "data";
-	//packFolderName
-	fs::path manifestPath = packRoot / "manifest.json";
+bool ofApp::LoadShaderPack(const std::string & packFolderName) {
+	const fs::path packName(packFolderName);
+	if (packFolderName.empty() || packName != packName.filename()
+		|| packName == "." || packName == "..") {
+		ofLogError("ofApp::LoadShaderPack") << "Invalid shader bank name: " << packFolderName;
+		return false;
+	}
 
-	if (!fs::exists(manifestPath)) {
-		std::cerr << "Manifest not found at: " << manifestPath << "\n";
-		return;
+	const fs::path dataRoot = ofToDataPath("", true);
+	fs::path packRoot = dataRoot / packFolderName;
+	fs::path manifestPath = packRoot / "manifest.json";
+	bool rootManifest = false;
+
+	std::error_code error;
+	const bool manifestExists = fs::exists(manifestPath, error);
+	if (error) {
+		ofLogError("ofApp::LoadShaderPack") << "Cannot access manifest " << manifestPath << ": " << error.message();
+		return false;
+	}
+	if (!manifestExists) {
+		packRoot = dataRoot;
+		manifestPath = dataRoot / "manifest.json";
+		rootManifest = true;
 	}
 
 	std::ifstream file(manifestPath);
-	nlohmann::json manifest = nlohmann::json::parse(file);
-	ofLogNotice("manifest") << manifest.dump(2);
-
-	for (auto & [progName, config] : manifest["programs"].items()) {
-		fs::path vertPath = packRoot / config["vertex"].get<std::string>();
-		fs::path fragPath = packRoot / config["fragment"].get<std::string>();
-
-		std::vector<std::string> defines;
-		if (config.contains("defines")) {
-			defines = config["defines"].get<std::vector<std::string>>();
-		}
-
-		std::string vertCode = LoadShaderWithDefines(vertPath, defines);
-		std::string fragCode = LoadShaderWithDefines(fragPath, defines);
-
-		// Compile vertCode & fragCode and link into GPU shader program under `progName`
-		std::cout << "Loaded shader program: " << progName << "\n";
+	if (!file.is_open()) {
+		ofLogError("ofApp::LoadShaderPack") << "Manifest not found or unreadable for bank "
+											<< packFolderName << ": " << manifestPath;
+		return false;
 	}
-}
+	try {
+		nlohmann::json manifest = nlohmann::json::parse(file);
+		if (!manifest.is_object() || !manifest.contains("programs") || !manifest["programs"].is_object()) {
+			ofLogError("ofApp::LoadShaderPack") << "Invalid programs object in " << manifestPath;
+			return false;
+		}
+		if (rootManifest && (!manifest.contains("pack_name") || !manifest["pack_name"].is_string() || manifest["pack_name"].get<std::string>() != packFolderName)) {
+			ofLogError("ofApp::LoadShaderPack") << "Manifest not found for shader bank: " << packFolderName;
+			return false;
+		}
+		shaderPrograms = std::move(manifest["programs"]);
+		shaderPackRoot = packRoot.string();
+		ofLogNotice("ofApp::LoadShaderPack") << "Loaded shader bank: " << packFolderName;
+		return true;
+	} catch (const nlohmann::json::exception & error) {
+		ofLogError("ofApp::LoadShaderPack") << "Invalid manifest " << manifestPath << ": " << error.what();
+		return false;
+	}
 }
 
 //--------------------------------------------------------------
 bool ofApp::loadShader(const std::string & name) {
-	std::string fragmentShaderName;
-	if (name == "blob") {
-		fragmentShaderName = "blob.frag";
-	} else if (name == "shader") {
-		fragmentShaderName = "shader.frag";
-	} else {
-		ofLogWarning("ofApp::loadShader") << "Unknown shader: " << name;
+	const std::string programName = name == "blob" && !shaderPrograms.contains(name) ? "Blob" : name;
+	const auto config = shaderPrograms.find(programName);
+	if (config == shaderPrograms.end() && name != "shader") {
+		ofLogError("ofApp::loadShader") << "Unknown shader in current bank: " << name;
 		return false;
 	}
 
-	const auto vertexShaderPath = ofToDataPath(shaderDirectory + "/shader.vert");
-	const auto fragmentShaderPath = ofToDataPath(shaderDirectory + "/" + fragmentShaderName);
 	ofShader candidate;
-	if (!candidate.load(vertexShaderPath, fragmentShaderPath)) {
-		ofLogError("ofApp::loadShader") << "Failed to load " << fragmentShaderName;
-		return false;
+	if (config == shaderPrograms.end()) {
+		const auto vertexShaderPath = ofToDataPath(shaderDirectory + "/shader.vert");
+		const auto fragmentShaderPath = ofToDataPath(shaderDirectory + "/shader.frag");
+		if (!candidate.load(vertexShaderPath, fragmentShaderPath)) {
+			ofLogError("ofApp::loadShader") << "Failed to load shader.frag";
+			return false;
+		}
+	} else {
+		try {
+			const fs::path vertPath = fs::path(shaderPackRoot) / config->at("vertex").get<std::string>();
+			const fs::path fragPath = fs::path(shaderPackRoot) / config->at("fragment").get<std::string>();
+			std::vector<std::string> defines;
+			if (config->contains("defines")) {
+				defines = config->at("defines").get<std::vector<std::string>>();
+			}
+			const std::string vertCode = LoadShaderWithDefines(vertPath, defines);
+			const std::string fragCode = LoadShaderWithDefines(fragPath, defines);
+			if (!candidate.setupShaderFromSource(GL_VERTEX_SHADER, vertCode, vertPath.parent_path())
+				|| !candidate.setupShaderFromSource(GL_FRAGMENT_SHADER, fragCode, fragPath.parent_path())) {
+				ofLogError("ofApp::loadShader") << "Failed to compile shader program: " << programName;
+				return false;
+			}
+			if (ofIsGLProgrammableRenderer()) {
+				candidate.bindDefaults();
+			}
+			if (!candidate.linkProgram()) {
+				ofLogError("ofApp::loadShader") << "Failed to link shader program: " << programName;
+				return false;
+			}
+		} catch (const nlohmann::json::exception & error) {
+			ofLogError("ofApp::loadShader") << "Invalid manifest entry for " << programName << ": " << error.what();
+			return false;
+		} catch (const std::runtime_error & error) {
+			ofLogError("ofApp::loadShader") << error.what();
+			return false;
+		}
 	}
 
 	shader = std::move(candidate);
 	shaderLoaded = true;
-	currentShaderName = name;
-	ofLogNotice("ofApp::loadShader") << "Loaded " << fragmentShaderName;
+	currentShaderName = programName;
+	ofLogNotice("ofApp::loadShader") << "Loaded shader program: " << programName;
 	return true;
 }
 
@@ -126,6 +173,14 @@ void ofApp::update() {
 			continue;
 		}
 		const auto address = message.getAddress();
+		if (address == "/shader_bank") {
+			if (message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING) {
+				ofLogWarning("ofApp::update") << "Expected one string argument for /shader_bank";
+				continue;
+			}
+			LoadShaderPack(message.getArgAsString(0));
+			continue;
+		}
 		if (address == "/shader") {
 			if (message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING) {
 				ofLogWarning("ofApp::update") << "Expected one string argument for /shader";

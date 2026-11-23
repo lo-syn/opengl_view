@@ -1,4 +1,7 @@
 {
+    "shaders": {
+        "directory_path": "bin/data/Shaders"
+    },
     "midi": {
         "midi_input_index": 1,
         "midi_cc_to_osc": {

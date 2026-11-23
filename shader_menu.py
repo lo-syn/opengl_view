@@ -1,7 +1,9 @@
 import sys
+import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from browser import BrowserHandler
 from midi_handler import MidiHandler
@@ -12,7 +14,7 @@ from audio_handler import (
     BluetoothInputRouter,
     BLUETOOTH_CAPTURE_SINK,
 )
-from schema import DefaultMenuItem, ShaderMenuItem, SettingsMenuItem
+from schema import DefaultMenuItem, ShaderItem, SettingsMenuItem, ShaderPackItem
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -66,8 +68,40 @@ class DefaultMenu(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.shaders = {"blob": ShaderMenuItem(on_state_msg="on"),
-           "shader": ShaderMenuItem(on_state_msg="on")}
+        self.active_shader_pack = None
+        settings_path = Path(__file__).resolve().parent / "settings.json"
+        with settings_path.open("r", encoding="utf-8") as settings_file:
+            self.app_settings = json.load(settings_file)
+
+
+        configured_shader_directory = Path(self.app_settings["shaders"]["directory_path"])
+        self.shader_directory = (
+            configured_shader_directory
+            if configured_shader_directory.is_absolute()
+            else Path(__file__).resolve().parent / configured_shader_directory
+        )
+        manifest_exists: bool = False
+        for file_path in self.shader_directory.rglob("manifest.json"):
+            with file_path.open("r", encoding="utf-8") as manifest_file:
+                self.manifest_data = json.load(manifest_file)
+                manifest_exists = True
+        if not manifest_exists:
+            raise FileNotFoundError("No manifest.json found in shader directory")
+
+        # Populate shaders with all available shader from shader pack
+        shader_pack_data = self.manifest_data["pack_names"]
+        self.shader_packs = {}        
+        for pack_name, pack_data in shader_pack_data.items():
+            self.shader_packs[pack_name] = ShaderPackItem()
+            current_pack_shaders = {}
+            for name in pack_data.keys():
+                current = ShaderItem(
+                    on_state_msg="on",
+                    frag_shader_path=pack_data[name].get("fragment"),
+                    vert_shader_path=pack_data[name].get("vertex"),
+                )
+                current_pack_shaders[name] = current
+            self.shader_packs[pack_name].shaders = current_pack_shaders
 
         self.settings = {
             "enable_midi": SettingsMenuItem(
@@ -190,15 +224,30 @@ class DefaultMenu(QWidget):
                 background = "#555" if row_index == selected_row else "transparent"
                 row.setStyleSheet(f"background-color: {background};")
 
-    def _populate_menu(self, menu_items: dict[str, DefaultMenuItem]):
+    def _populate_menu(self, menu_items: dict[str, DefaultMenuItem], offset: bool = False):
         # Populates selected list widget with menu items
         for name, menu_item in menu_items.items():
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, name)
-            row = self._create_row(name, menu_item)
+            item.setData(Qt.ItemDataRole.UserRole + 1, offset)
+            row = self._create_row(name, menu_item, offset)
             self.list_widget.addItem(item)
             item.setSizeHint(row.sizeHint())
             self.list_widget.setItemWidget(item, row)
+
+    def _collapse_menu(self, menu_items: dict[str, DefaultMenuItem], offset: bool = False):
+        for row_index in reversed(range(self.list_widget.count())):
+            item = self.list_widget.item(row_index)
+            name = item.data(Qt.ItemDataRole.UserRole)
+            item_offset = item.data(Qt.ItemDataRole.UserRole + 1)
+            if name not in menu_items or item_offset != offset:
+                continue
+
+            row = self.list_widget.itemWidget(item)
+            self.list_widget.removeItemWidget(item)
+            self.list_widget.takeItem(row_index)
+            if row is not None:
+                row.deleteLater()
 
     def show_shaders(self):
         self.clear_message()
@@ -206,7 +255,10 @@ class DefaultMenu(QWidget):
         self.current_page = "shaders"
         self.title.setText("SHADER")
         self.list_widget.clear()
-        self._populate_menu(self.shaders)
+        for pack in self.shader_packs.values():
+            pack.state = False
+        self.active_shader_pack = None
+        self._populate_menu(self.shader_packs)
         self.list_widget.setCurrentRow(0)
 
     def show_settings(self):
@@ -495,18 +547,22 @@ class DefaultMenu(QWidget):
         self.message_bar.setText(text)
         QApplication.processEvents()
 
-    def _create_row(self, name: str, menu_item: DefaultMenuItem):
+    def _create_row(self, name: str, menu_item: DefaultMenuItem, offset: bool = False):
         row = QWidget()
         row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setContentsMargins(40 if offset else 0, 0, 0, 0)
         row_layout.addWidget(QLabel(name))
         row_layout.addStretch()
+
         
         # Special handling for audio mode display
         if name == "enable_audio_input":
             status = QLabel(self.settings[name].status_labels[self.audio_mode])
         elif name == "enable_audio_output" and self.output_router.device is not None:
             status = QLabel(self.output_router.device.description())
+        elif name in self.shader_packs:
+            status = QLabel()
+
         elif menu_item.state:
             status = QLabel(menu_item.on_state_msg)
         else:
@@ -554,11 +610,34 @@ class DefaultMenu(QWidget):
             else:
                 self.status_labels[name].setText(current_setting.off_state_msg)
 
+    def _run_shader_pack_option(self, name: str):
+        if name not in self.shader_packs.keys():
+            self._update_message("Attempting to run missing shader pack")
+            return
+
+        selected_pack = self.shader_packs[name]
+        if selected_pack.state:
+            self._collapse_menu(selected_pack.shaders, offset=True)
+            selected_pack.state = False
+            return
+
+        for pack in self.shader_packs.values():
+            if pack.state:
+                self._collapse_menu(pack.shaders, offset=True)
+                pack.state = False
+
+        self.active_shader_pack = selected_pack
+        for shader_name in selected_pack.shaders.keys():
+            self.status_labels[shader_name] = QLabel()
+        self._populate_menu(selected_pack.shaders, offset=True)
+        selected_pack.state = True
+
+
     def _run_shader_option(self, name: str):
-        if name not in self.shaders.keys():
+        if name not in self.active_shader_pack.shaders.keys():
             self._update_message("Attempting to run missing shader")
             return
-        current_shader: ShaderMenuItem = self.shaders[name]
+        current_shader: ShaderItem = self.active_shader_pack.shaders[name]
         # Reset if already active
         if self.active_shader == name:
             current_shader.state = False
@@ -569,7 +648,7 @@ class DefaultMenu(QWidget):
             return
         # Set off message for previous shader
         if self.active_shader is not None:
-            previous_shader = self.shaders[self.active_shader]
+            previous_shader = self.active_shader_pack.shaders[self.active_shader]
             previous_shader.state = False
             self.status_labels[self.active_shader].setText(previous_shader.off_state_msg)
 
@@ -587,7 +666,13 @@ class DefaultMenu(QWidget):
             self._run_settings_option(name)
             return
         if self.current_page == "shaders":
-            self._run_shader_option(name)
+            # Opens shader pack if the name corresponds to a shader pack
+            # Else sends shader with shader name
+            if name in self.shader_packs:
+                self.active_shader_pack = self.shader_packs[name]
+                self._run_shader_pack_option(name)
+            else:
+                self._run_shader_option(name)
             return
         if self.current_page == "browser":
             try:
