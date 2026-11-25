@@ -2,10 +2,9 @@
 
 #include "ofMain.h"
 #include "ofxOsc.h"
-#include <nlohmann/json.hpp>
+#include <array>
 
-class ofApp : public ofBaseApp
-{
+class ofApp : public ofBaseApp {
 public:
 	void setup();
 	void update();
@@ -26,19 +25,19 @@ public:
 	void dragEvent(ofDragInfo dragInfo);
 	void gotMessage(ofMessage msg);
 
-	ofShader shader;
-	bool shaderLoaded = false;
 	ofxOscReceiver oscReceiver;
 	float shaderX0 = 0.1f;
 	float shaderX1 = 0.1f;
 	float shaderX2 = 0.1f;
 	float shaderX3 = 0.1f;
+	int selectedFb = 0;
 
 private:
-	bool loadShader(const std::string &name);
-	bool LoadShaderPack(const std::string &packFolderName);
-	std::string shaderDirectory;
-	std::string currentShaderName = "blob";
-	std::string shaderPackRoot;
-	nlohmann::json shaderPrograms = nlohmann::json::object();
+	struct ShaderState {
+		ofShader shader;
+		bool loaded = false;
+		std::string name = "reset";
+	};
+	std::array<ShaderState, 3> shaders;
+	bool loadShader(const std::string & fragPath);
 };

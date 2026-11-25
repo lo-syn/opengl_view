@@ -1,7 +1,16 @@
 /obj/
+/.vs/
 /bin/opengl_viewer
 /bin/opengl_viewer_debug
+/bin/opengl_view
+/bin/opengl_view_debug
+/bin/opengl_view*.exe
+/bin/opengl_view*.exp
+/bin/opengl_view*.ilk
+/bin/opengl_view*.lib
+/bin/opengl_view*.pdb
 /.vscode/browse.db
+*.vcxproj.user
 
 venv/
 .venv/

@@ -13,6 +13,10 @@ parameter updates over OSC.
 Do not copy the openFrameworks SDK into this repository. Install it separately
 and point `OF_ROOT` at its root directory.
 
+On Windows, the VS Code build tasks use MSYS2 UCRT64. Install the
+openFrameworks MSYS2 dependencies in that environment, including GLFW, and
+build the openFrameworks core with the same toolchain.
+
 ## Build and run
 
 From this project directory, set `OF_ROOT` to your openFrameworks installation:
@@ -52,10 +56,14 @@ to the bank folder:
 }
 ```
 
-`defines` is optional. Send `/shader` with the string `waves` to compile and
-select that program. Program names are case-sensitive. Send `/shader` with
-`reset` to clear the display. The selected shader remains visible when changing
-banks, or if a bank or shader fails to load; errors are logged by the renderer.
+`defines` is optional. Send `/fb0`, `/fb1`, or `/fb2` to select a framebuffer
+(the default is `/fb0`), then send `/shader` with the string `waves` to compile
+and select that program for that framebuffer. Program names are case-sensitive.
+Send `/shader` with `reset` to clear the selected framebuffer. Layers are
+composited in order from fb0 to fb2, so opaque later layers cover earlier ones.
+The `/u_x0`–`/u_x3` values are shared by all layers. The selected shader remains
+visible when changing banks, or if a bank or shader fails to load; errors are
+logged by the renderer.
 Re-select a program to load changed shader files, or re-send `/shader_bank`
 to reload a changed manifest.
 

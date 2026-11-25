@@ -28,7 +28,13 @@
             },
             "windows": {
                 "MIMode": "gdb",
-                "miDebuggerPath": "gdb.exe",
+                "miDebuggerPath": "C:/msys64/mingw64/bin/gdb.exe",
+                "environment": [
+                    {
+                        "name": "PATH",
+                        "value": "C:\\msys64\\ucrt64\\bin;${env:PATH}"
+                    }
+                ],
                 "setupCommands": [
                     {
                         "description": "Enable pretty-printing for gdb",
@@ -36,7 +42,7 @@
                         "ignoreFailures": true
                     }
                 ],
-                "program": "${workspaceFolder}/bin/${workspaceFolderBasename}_debug"
+                "program": "${workspaceFolder}/bin/${workspaceFolderBasename}_debug.exe"
             }
         },
         {
@@ -60,6 +66,7 @@
             },
             "windows": {
                 "MIMode": "gdb",
+                "miDebuggerPath": "C:/msys64/mingw64/bin/gdb.exe",
                 "setupCommands": [
                     {
                         "description": "Enable pretty-printing for gdb",
