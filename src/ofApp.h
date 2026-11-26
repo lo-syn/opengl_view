@@ -3,6 +3,9 @@
 #include "ofMain.h"
 #include "ofxOsc.h"
 #include <array>
+#include <string>
+#include "ofxISFScene.h"
+
 
 class ofApp : public ofBaseApp {
 public:
@@ -26,18 +29,15 @@ public:
 	void gotMessage(ofMessage msg);
 
 	ofxOscReceiver oscReceiver;
+	ofxISFScene sceneA;
+	ofxISFScene sceneB;
+	ofxISFScene sceneC;
+	std::array<bool, 3> sceneLoaded = { false, false, false };
 	float shaderX0 = 0.1f;
 	float shaderX1 = 0.1f;
 	float shaderX2 = 0.1f;
 	float shaderX3 = 0.1f;
 	int selectedFb = 0;
 
-private:
-	struct ShaderState {
-		ofShader shader;
-		bool loaded = false;
-		std::string name = "reset";
-	};
-	std::array<ShaderState, 3> shaders;
 	bool loadShader(const std::string & fragPath);
 };

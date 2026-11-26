@@ -7,6 +7,9 @@
 		<ClCompile Include="src\main.cpp">
 			<Filter>src</Filter>
 		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxISF\libs\jsonxx\jsonxx.cc">
+			<Filter>addons\ofxISF\libs\jsonxx</Filter>
+		</ClCompile>
 		<ClCompile Include="..\..\..\addons\ofxOsc\src\ofxOscBundle.cpp">
 			<Filter>addons\ofxOsc\src</Filter>
 		</ClCompile>
@@ -43,42 +46,183 @@
 		<ClCompile Include="..\..\..\addons\ofxOsc\libs\oscpack\src\osc\OscTypes.cpp">
 			<Filter>addons\ofxOsc\libs\oscpack\src\osc</Filter>
 		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxPoco\src\ofxXmlPoco.cpp">
+			<Filter>addons\ofxPoco\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\src\ofxISFScene.cpp">
+			<Filter>addons\ofxVVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLBuffer.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLBufferPool.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLCachedProperty.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLContext.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLContextWindowBacking.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLCPUToTexCopier.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLScene.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLTexToCPUCopier.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\GLTexToTexCopier.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\VVGL_Geom.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\src\VVGL_StringUtils.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\ISFAttr.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\ISFDoc.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\ISFPassTarget.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\ISFScene.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\ISFVal.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\VVISF_Base.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
+		<ClCompile Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\src\VVISF_StringUtils.cpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\src</Filter>
+		</ClCompile>
 	</ItemGroup>
 	<ItemGroup>
 		<Filter Include="src">
 			<UniqueIdentifier>{d8376475-7454-4a24-b08a-aac121d3ad6f}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons">
-			<UniqueIdentifier>{E1CFD2F4--E95-1-46-2D-9-DBE-22F76EAAA6FF}</UniqueIdentifier>
+			<UniqueIdentifier>{3574510D--87F-7-47-7B-A-45F-75E471CC5150}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxISF">
+			<UniqueIdentifier>{8C74DD55--710-C-47-05-B-147-C04812C37E96}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxISF\src">
+			<UniqueIdentifier>{82EA9341--F1B-2-4A-84-8-B1C-A41186784965}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxISF\src\ofxISF">
+			<UniqueIdentifier>{E448B2A9--3FC-4-49-12-A-893-16E677767283}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxISF\libs">
+			<UniqueIdentifier>{4BF6674A--2F8-3-42-50-B-425-CDF3D5350B06}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxISF\libs\jsonxx">
+			<UniqueIdentifier>{E7DA8F20--3B4-5-42-5B-9-6BB-A3E14840105B}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc">
-			<UniqueIdentifier>{FB158246--4B2-6-4B-4A-8-422-123EC00F79F3}</UniqueIdentifier>
+			<UniqueIdentifier>{5E6E4101--C9B-E-40-D7-8-272-4EE489160B92}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\src">
-			<UniqueIdentifier>{29089B23--02B-7-4B-36-9-9A8-460C802BDC99}</UniqueIdentifier>
+			<UniqueIdentifier>{A2AFE108--204-C-43-F5-A-454-4618E09C31EB}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs">
-			<UniqueIdentifier>{3B405D3F--A88-E-4B-C3-A-75B-6DA9BD522366}</UniqueIdentifier>
+			<UniqueIdentifier>{8241C74A--8F3-A-41-7A-A-594-BB08A0444F22}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs\oscpack">
-			<UniqueIdentifier>{6C16AB0A--3C2-A-4C-69-B-328-E5DA91A07384}</UniqueIdentifier>
+			<UniqueIdentifier>{566494B4--15E-9-45-A0-8-87A-CAB82CA78558}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs\oscpack\src">
-			<UniqueIdentifier>{A70A8C2B--491-7-49-6A-A-95F-8D0D68A2512C}</UniqueIdentifier>
+			<UniqueIdentifier>{4A04E512--8EE-C-4F-E9-B-D6C-E90274920BE3}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs\oscpack\src\ip">
-			<UniqueIdentifier>{B527B26D--7C1-D-4A-69-8-E00-2FD04C879E16}</UniqueIdentifier>
+			<UniqueIdentifier>{40BDE3EC--6E2-B-47-53-9-AA2-4FE5E545E70F}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs\oscpack\src\ip\win32">
-			<UniqueIdentifier>{C61FED35--9FB-7-47-75-8-3F1-D53FF4002E0B}</UniqueIdentifier>
+			<UniqueIdentifier>{CD00CF84--3B7-3-49-9A-8-092-0F5B7D4E1EEE}</UniqueIdentifier>
 		</Filter>
 		<Filter Include="addons\ofxOsc\libs\oscpack\src\osc">
-			<UniqueIdentifier>{2BEB4BED--C4B-F-45-D6-9-7BF-4059F27B95F2}</UniqueIdentifier>
+			<UniqueIdentifier>{05A00776--DCB-D-42-8E-A-47F-A9560626301F}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxPoco">
+			<UniqueIdentifier>{DC6A50A6--CED-4-43-73-8-D05-C29C1A82E518}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxPoco\src">
+			<UniqueIdentifier>{B643DB32--5A8-A-46-F2-B-99E-671397F07403}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF">
+			<UniqueIdentifier>{377424F5--C35-F-45-03-B-6C7-11A143A4844E}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\src">
+			<UniqueIdentifier>{F1ACA673--326-9-4C-30-A-D5C-D64D2681D7A9}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs">
+			<UniqueIdentifier>{A622706F--6BA-A-44-7F-8-663-F4A7B4C2F5B2}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL">
+			<UniqueIdentifier>{CC653989--FB2-A-46-99-A-231-7CBC30405739}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVGL">
+			<UniqueIdentifier>{A9375746--54A-6-46-28-B-4C5-72D66FF6BD55}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVGL\include">
+			<UniqueIdentifier>{81BC60B3--204-B-49-DD-8-33B-1290A5F62BB5}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVGL\include\stb">
+			<UniqueIdentifier>{9F3E56C8--DB8-1-42-5F-9-6CB-C0272535649E}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVGL\src">
+			<UniqueIdentifier>{0DB8DA64--742-2-44-54-A-AE9-EFE0F6755696}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVISF">
+			<UniqueIdentifier>{4A1604AA--F3D-1-43-8F-B-8CF-64E05B16FCA2}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVISF\include">
+			<UniqueIdentifier>{051BF994--140-D-44-B5-9-659-835F54EE1485}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVISF\include\exprtk">
+			<UniqueIdentifier>{A072D6B7--4E7-0-42-BC-A-49F-4FCBD0F67A1D}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVISF\include\nlohmann_json">
+			<UniqueIdentifier>{C83E16F6--D9A-B-41-F2-B-16A-62CD974711F5}</UniqueIdentifier>
+		</Filter>
+		<Filter Include="addons\ofxVVISF\libs\VVISF-GL\VVISF\src">
+			<UniqueIdentifier>{1A52437C--8FB-F-4A-53-A-B9A-AE82F7BD2EF1}</UniqueIdentifier>
 		</Filter>
 	</ItemGroup>
 	<ItemGroup>
 		<ClInclude Include="src\ofApp.h">
 			<Filter>src</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF\Chain.h">
+			<Filter>addons\ofxISF\src\ofxISF</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF\CodeGenerater.h">
+			<Filter>addons\ofxISF\src\ofxISF</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF\Constants.h">
+			<Filter>addons\ofxISF\src\ofxISF</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF\Shader.h">
+			<Filter>addons\ofxISF\src\ofxISF</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF\Uniforms.h">
+			<Filter>addons\ofxISF\src\ofxISF</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\src\ofxISF.h">
+			<Filter>addons\ofxISF\src</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxISF\libs\jsonxx\jsonxx.h">
+			<Filter>addons\ofxISF\libs\jsonxx</Filter>
 		</ClInclude>
 		<ClInclude Include="..\..\..\addons\ofxOsc\src\ofxOsc.h">
 			<Filter>addons\ofxOsc\src</Filter>
@@ -139,6 +283,114 @@
 		</ClInclude>
 		<ClInclude Include="..\..\..\addons\ofxOsc\libs\oscpack\src\osc\OscTypes.h">
 			<Filter>addons\ofxOsc\libs\oscpack\src\osc</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxPoco\src\ofxXmlPoco.h">
+			<Filter>addons\ofxPoco\src</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\src\ofxISFScene.h">
+			<Filter>addons\ofxVVISF\src</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLBuffer.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLBufferPool.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLBuffer_Enums_GLFW.h">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLCachedProperty.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLContext.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLContextWindowBacking.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLCPUToTexCopier.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLQtCtxWrapper.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLScene.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLTexToCPUCopier.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\GLTexToTexCopier.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\stb\stb_image.h">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include\stb</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Base.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Defines.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Doxygen.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Geom.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_HardCodedDefines.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Range.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_StringUtils.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVGL\include\VVGL_Time.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVGL\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\exprtk\exprtk.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include\exprtk</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\ISFAttr.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\ISFDoc.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\ISFPassTarget.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\ISFScene.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\ISFVal.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\nlohmann_json\json.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include\nlohmann_json</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF_Base.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF_Constants.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF_Doxygen.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF_Err.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
+		</ClInclude>
+		<ClInclude Include="..\..\..\addons\ofxVVISF\libs\VVISF-GL\VVISF\include\VVISF_StringUtils.hpp">
+			<Filter>addons\ofxVVISF\libs\VVISF-GL\VVISF\include</Filter>
 		</ClInclude>
 	</ItemGroup>
 	<ItemGroup>

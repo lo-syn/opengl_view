@@ -1,1 +1,4 @@
+ofxISF
 ofxOsc
+ofxPoco
+ofxVVISF

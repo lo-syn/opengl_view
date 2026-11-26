@@ -2,10 +2,7 @@
 
 #include <cmath>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <string>
-#include <utility>
 
 namespace {
 constexpr int oscPort = 8001;
@@ -18,51 +15,37 @@ void ofApp::setup() {
 		ofLogError("ofApp::setup") << "Failed to listen for OSC on port " << oscPort;
 	}
 
-	// Create and allocate FBO layers, 3 layers
-	layerA.allocate(ofGetWidth(), ofGetHeight(), GL_RGBA);
-	layerB.allocate(ofGetWidth(), ofGetHeight(), GL_RGBA);
-	layerC.allocate(ofGetWidth(), ofGetHeight(), GL_RGBA);
+	std::cout << "Listening for OSC messages on port " << oscPort << std::endl;
+
+	layerA.allocate(1280, 720, GL_RGBA);
+	layerB.allocate(1280, 720, GL_RGBA);
+	layerC.allocate(1280, 720, GL_RGBA);
 }
 
 //--------------------------------------------------------------
 bool ofApp::loadShader(const std::string & fragPath) {
 	const fs::path path(fragPath);
 	if (!path.is_absolute()) {
-		ofLogError("ofApp::loadShader") << "Expected an absolute path to a shader .frag file: " << fragPath;
+		ofLogError("ofApp::loadShader") << "Expected an absolute path to a shader .frag/.fs file: " << fragPath;
+		return false;
+	}
+	if (!fs::exists(path)) {
+		ofLogError("ofApp::loadShader") << "Shader file does not exist: " << path.string();
 		return false;
 	}
 
-	std::ifstream file(path);
-	if (!file.is_open()) {
-		ofLogError("ofApp::loadShader") << "Failed to open shader: " << path.string();
+	ofFbo * layers[] = { &layerA, &layerB, &layerC };
+	ofxISFScene * scenes[] = { &sceneA, &sceneB, &sceneC };
+	if (selectedFb < 0 || selectedFb >= 3) {
 		return false;
 	}
 
-	std::stringstream buffer;
-	buffer << file.rdbuf();
-	if (file.bad()) {
-		ofLogError("ofApp::loadShader") << "Failed to read shader: " << path.string();
-		return false;
-	}
+	int w = static_cast<int>(layers[selectedFb]->getWidth());
+	int h = static_cast<int>(layers[selectedFb]->getHeight());
 
-	ofShader candidate;
-	if (!candidate.setupShaderFromSource(GL_FRAGMENT_SHADER, buffer.str(), path.parent_path())) {
-		ofLogError("ofApp::loadShader") << "Failed to compile shader: " << path.string();
-		return false;
-	}
-	if (ofIsGLProgrammableRenderer()) {
-		candidate.bindDefaults();
-	}
-	if (!candidate.linkProgram()) {
-		ofLogError("ofApp::loadShader") << "Failed to link shader: " << path.string();
-		return false;
-	}
-
-	auto & state = shaders[selectedFb];
-	state.shader = std::move(candidate);
-	state.loaded = true;
-	state.name = path.string();
-	ofLogNotice("ofApp::loadShader") << "Loaded shader " << path.string() << " on fb" << selectedFb;
+	scenes[selectedFb]->setup(path.string(), w, h);
+	sceneLoaded[selectedFb] = true;
+	ofLogNotice("ofApp::loadShader") << "Loaded ISF shader " << path.string() << " on fb" << selectedFb;
 	return true;
 }
 
@@ -94,8 +77,7 @@ void ofApp::update() {
 				continue;
 			}
 			if (message.getArgAsString(0) == "reset") {
-				shaders[selectedFb].loaded = false;
-				shaders[selectedFb].name = "reset";
+				sceneLoaded[selectedFb] = false;
 				ofLogNotice("ofApp::update") << "Reset shader on fb" << selectedFb;
 				continue;
 			}
@@ -115,6 +97,7 @@ void ofApp::update() {
 		} else {
 			continue;
 		}
+
 		if (message.getNumArgs() != 1) {
 			ofLogWarning("ofApp::update") << "Expected one numeric argument for " << address;
 			continue;
@@ -131,37 +114,49 @@ void ofApp::update() {
 			ofLogWarning("ofApp::update") << "Ignoring non-finite value for " << address;
 			continue;
 		}
+
 		*shaderValue = value;
+	}
+
+	// Push shared uniforms into each loaded ISF scene
+	ofxISFScene * scenes[] = { &sceneA, &sceneB, &sceneC };
+	for (size_t i = 0; i < 3; ++i) {
+		if (!sceneLoaded[i]) {
+			continue;
+		}
+		scenes[i]->setInput("u_x0", shaderX0);
+		scenes[i]->setInput("u_x1", shaderX1);
+		scenes[i]->setInput("u_x2", shaderX2);
+		scenes[i]->setInput("u_x3", shaderX3);
 	}
 }
 
 //--------------------------------------------------------------
 void ofApp::draw() {
 	ofFbo * layers[] = { &layerA, &layerB, &layerC };
-	ofPushStyle();
-	ofDisableAlphaBlending();
-	for (size_t i = 0; i < shaders.size(); ++i) {
-		auto & layer = *layers[i];
-		auto & state = shaders[i];
+	ofxISFScene * scenes[] = { &sceneA, &sceneB, &sceneC };
 
-		layer.begin();
-		ofClear(0, 0, 0, 0);
-		if (state.loaded) {
-			ofSetColor(255);
-			state.shader.begin();
-			state.shader.setUniform2f("u_resolution", layer.getWidth(), layer.getHeight());
-			state.shader.setUniform2f("resolution", layer.getWidth(), layer.getHeight());
-			state.shader.setUniform1f("u_time", ofGetElapsedTimef());
-			state.shader.setUniform1f("u_x0", shaderX0);
-			state.shader.setUniform1f("u_x1", shaderX1);
-			state.shader.setUniform1f("u_x2", shaderX2);
-			state.shader.setUniform1f("u_x3", shaderX3);
-			ofDrawRectangle(0, 0, layer.getWidth(), layer.getHeight());
-			state.shader.end();
+	// 1. Render each ISF scene to its own internal texture FIRST
+	for (size_t i = 0; i < 3; ++i) {
+		if (sceneLoaded[i]) {
+			scenes[i]->update();
 		}
-		layer.end();
 	}
 
+	// 2. Draw each rendered scene into its corresponding ofFbo
+	ofPushStyle();
+	ofDisableAlphaBlending();
+	for (size_t i = 0; i < 3; ++i) {
+		layers[i]->begin();
+		ofClear(0, 0, 0, 0);
+		if (sceneLoaded[i]) {
+			ofSetColor(255);
+			scenes[i]->draw(0, 0);
+		}
+		layers[i]->end();
+	}
+
+	// 3. Composite the three FBO layers to the screen
 	ofBackground(0);
 	ofEnableAlphaBlending();
 	ofSetColor(255);
@@ -169,38 +164,6 @@ void ofApp::draw() {
 		layer->draw(0, 0);
 	}
 	ofPopStyle();
-}
-
-//--------------------------------------------------------------
-void ofApp::keyPressed(int key) {
-}
-
-//--------------------------------------------------------------
-void ofApp::keyReleased(int key) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseMoved(int x, int y) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseDragged(int x, int y, int button) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mousePressed(int x, int y, int button) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseReleased(int x, int y, int button) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseEntered(int x, int y) {
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseExited(int x, int y) {
 }
 
 //--------------------------------------------------------------
@@ -213,9 +176,13 @@ void ofApp::windowResized(int w, int h) {
 }
 
 //--------------------------------------------------------------
-void ofApp::gotMessage(ofMessage msg) {
-}
-
-//--------------------------------------------------------------
-void ofApp::dragEvent(ofDragInfo dragInfo) {
-}
+void ofApp::keyPressed(int key) { }
+void ofApp::keyReleased(int key) { }
+void ofApp::mouseMoved(int x, int y) { }
+void ofApp::mouseDragged(int x, int y, int button) { }
+void ofApp::mousePressed(int x, int y, int button) { }
+void ofApp::mouseReleased(int x, int y, int button) { }
+void ofApp::mouseEntered(int x, int y) { }
+void ofApp::mouseExited(int x, int y) { }
+void ofApp::gotMessage(ofMessage msg) { }
+void ofApp::dragEvent(ofDragInfo dragInfo) { }

@@ -6,7 +6,7 @@ int main() {
 	// Use a borderless window so the external shader menu can remain above it.
 	ofGLFWWindowSettings settings;
 
-	settings.setSize(680, 420);
+	settings.setSize(1280, 720);
 	settings.setPosition({ 0, 0 });
 	settings.windowMode = OF_WINDOW;
 	settings.decorated = false;

@@ -1,17 +1,34 @@
-// Raymarching .frag test
-// Author: lo_syn
-//gen-shader
-
-#ifdef GL_ES
-precision mediump float;
-#endif
-
-uniform vec2 u_resolution; // width and height (in pixels) of the rendering target
-uniform float u_time; // number of seconds since the shader started running
-uniform float u_x0; // input parameter 0
-uniform float u_x1; // wave amplitude control (0-1)
-uniform float u_x2; // wave frequency control (0-1)
-uniform float u_x3; // input parameter 3 
+/*{
+  "DESCRIPTION": "Blob",
+  "CREDIT": "ISF Example",
+  "ISFVSN": "2",
+  "INPUTS": [
+    {
+      "NAME": "color",
+      "LABEL": "Color",
+      "TYPE": "float",
+      "DEFAULT": 1.0,
+      "MIN": 0.0,
+      "MAX": 1.0
+    },
+    {
+      "NAME": "amp",
+      "LABEL": "Amplitude",
+      "TYPE": "float",
+      "DEFAULT": 1.0,
+      "MIN": 0.0,
+      "MAX": 1.0
+    },
+    {
+      "NAME": "freq",
+      "LABEL": "Frequency",
+      "TYPE": "float",
+      "DEFAULT": 6.0,
+      "MIN": 1.0,
+      "MAX": 1.0
+    }
+  ]
+}*/
 
 float sdSphere(vec3 p, float s){
     // Sphere SDF
@@ -82,14 +99,14 @@ vec3 palette( float t ){
 }
 
 void main() {
-    float colour_multi = u_x0 * 5.;
-    float waveAmplitude = 0.2 * u_x1;
-    float waveFrequency = 1.0 + 14.0 * u_x2;
-    float wavePhase = u_time * 2.0;
-    float timeSin = sin(u_time);
-    float timeCos = cos(u_time);
+    float colour_multi = color * 5.;
+    float waveAmplitude = 0.2 * amp;
+    float waveFrequency = 1.0 + 14.0 * freq;
+    float wavePhase = TIME * 2.0;
+    float timeSin = sin(TIME);
+    float timeCos = cos(TIME);
     mat2 cameraRotation = mat2(timeCos, -timeSin, timeSin, timeCos);
-    vec2 uv = (gl_FragCoord.xy * 2. - u_resolution.xy) / u_resolution.y;
+    vec2 uv = (gl_FragCoord.xy * 2. - RENDERSIZE.xy) / RENDERSIZE.y;
 
     // Initialization
     vec3 ro = vec3(0., 0., -3.); // ray origin
@@ -98,7 +115,7 @@ void main() {
     vec3 col = vec3(0.);
 
     // Horizontal camera rotation
-    float infinite = normalSin(u_time*5.);
+    float infinite = normalSin(TIME*5.);
     ro.xz *= cameraRotation;
     rd.xz *= cameraRotation;
 
