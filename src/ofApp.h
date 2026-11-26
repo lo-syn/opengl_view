@@ -33,6 +33,14 @@ public:
 	ofxISFScene sceneB;
 	ofxISFScene sceneC;
 	std::array<bool, 3> sceneLoaded = { false, false, false };
+
+	struct ParamInfo {
+		std::string name;
+		VVISF::ISFValType type;
+		float minVal = 0.0f;
+		float maxVal = 1.0f;
+	};
+	std::array<std::vector<ParamInfo>, 3> sceneParams;
 	float shaderX0 = 0.1f;
 	float shaderX1 = 0.1f;
 	float shaderX2 = 0.1f;

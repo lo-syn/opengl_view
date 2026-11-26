@@ -23,8 +23,8 @@
       "NAME": "freq",
       "LABEL": "Frequency",
       "TYPE": "float",
-      "DEFAULT": 6.0,
-      "MIN": 1.0,
+      "DEFAULT": 0.1,
+      "MIN": 0.0,
       "MAX": 1.0
     }
   ]

@@ -51,13 +51,17 @@ bool ofApp::loadShader(const std::string & fragPath) {
 
 //--------------------------------------------------------------
 void ofApp::update() {
+	ofxISFScene * scenes[] = { &sceneA, &sceneB, &sceneC };
+
 	while (oscReceiver.hasWaitingMessages()) {
 		ofxOscMessage message;
 		if (!oscReceiver.getNextMessage(message)) {
 			continue;
 		}
+
 		const auto address = message.getAddress();
 
+		// 1. Select active framebuffer layer
 		if (address == "/fb0") {
 			selectedFb = 0;
 			continue;
@@ -71,6 +75,7 @@ void ofApp::update() {
 			continue;
 		}
 
+		// 2. Load or reset shader on the selected layer
 		if (address == "/shader") {
 			if (message.getNumArgs() != 1 || message.getArgType(0) != OFXOSC_TYPE_STRING) {
 				ofLogWarning("ofApp::update") << "Expected one string argument for /shader";
@@ -85,49 +90,52 @@ void ofApp::update() {
 			continue;
 		}
 
-		float * shaderValue = nullptr;
-		if (address == "/u_x0") {
-			shaderValue = &shaderX0;
-		} else if (address == "/u_x1") {
-			shaderValue = &shaderX1;
-		} else if (address == "/u_x2") {
-			shaderValue = &shaderX2;
-		} else if (address == "/u_x3") {
-			shaderValue = &shaderX3;
+		// 3. Parse target layer and ISF parameter name from the OSC address
+		int targetFb = selectedFb;
+		std::string paramName;
+
+		if (address.rfind("/fb0/", 0) == 0) {
+			targetFb = 0;
+			paramName = address.substr(5);
+		} else if (address.rfind("/fb1/", 0) == 0) {
+			targetFb = 1;
+			paramName = address.substr(5);
+		} else if (address.rfind("/fb2/", 0) == 0) {
+			targetFb = 2;
+			paramName = address.substr(5);
+		} else if (address.size() > 1 && address[0] == '/') {
+			paramName = address.substr(1);
 		} else {
 			continue;
 		}
 
-		if (message.getNumArgs() != 1) {
-			ofLogWarning("ofApp::update") << "Expected one numeric argument for " << address;
+		if (paramName.empty() || targetFb < 0 || targetFb >= 3 || !sceneLoaded[targetFb]) {
 			continue;
 		}
 
-		const auto type = message.getArgType(0);
-		if (type != OFXOSC_TYPE_FLOAT && type != OFXOSC_TYPE_INT32) {
-			ofLogWarning("ofApp::update") << "Expected a float or integer argument for " << address;
-			continue;
-		}
+		auto * targetScene = scenes[targetFb];
+		const int numArgs = message.getNumArgs();
 
-		const float value = message.getArgAsFloat(0);
-		if (!std::isfinite(value)) {
-			ofLogWarning("ofApp::update") << "Ignoring non-finite value for " << address;
-			continue;
+		// 4. Pass the incoming OSC argument(s) directly to the matching ISF input
+		if (numArgs == 1) {
+			const auto type = message.getArgType(0);
+			if (type == OFXOSC_TYPE_FLOAT) {
+				const float val = message.getArgAsFloat(0);
+				if (std::isfinite(val)) {
+					targetScene->setInput(paramName, val);
+				}
+			} else if (type == OFXOSC_TYPE_INT32) {
+				const int32_t val = message.getArgAsInt32(0);
+				targetScene->setInput(paramName, static_cast<long>(val));
+				targetScene->setInput(paramName, static_cast<float>(val));
+			} else if (type == OFXOSC_TYPE_TRUE || type == OFXOSC_TYPE_FALSE) {
+				targetScene->setInput(paramName, message.getArgAsBool(0));
+			}
+		} else if (numArgs == 2 && message.getArgType(0) == OFXOSC_TYPE_FLOAT && message.getArgType(1) == OFXOSC_TYPE_FLOAT) {
+			targetScene->setInput(paramName, ofVec2f(message.getArgAsFloat(0), message.getArgAsFloat(1)));
+		} else if (numArgs == 4 && message.getArgType(0) == OFXOSC_TYPE_FLOAT) {
+			targetScene->setInput(paramName, ofFloatColor(message.getArgAsFloat(0), message.getArgAsFloat(1), message.getArgAsFloat(2), message.getArgAsFloat(3)));
 		}
-
-		*shaderValue = value;
-	}
-
-	// Push shared uniforms into each loaded ISF scene
-	ofxISFScene * scenes[] = { &sceneA, &sceneB, &sceneC };
-	for (size_t i = 0; i < 3; ++i) {
-		if (!sceneLoaded[i]) {
-			continue;
-		}
-		scenes[i]->setInput("u_x0", shaderX0);
-		scenes[i]->setInput("u_x1", shaderX1);
-		scenes[i]->setInput("u_x2", shaderX2);
-		scenes[i]->setInput("u_x3", shaderX3);
 	}
 }
 
